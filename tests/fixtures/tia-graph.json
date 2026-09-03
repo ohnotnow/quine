@@ -1,0 +1,9 @@
+{
+    "files": [
+        "workbench/resources/views/posts/show.blade.php",
+        "workbench/app/Models/Post.php"
+    ],
+    "edges": {
+        "workbench/tests/Feature/PostPageTest.php": [0, 1]
+    }
+}
