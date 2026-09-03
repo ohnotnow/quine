@@ -1,5 +1,7 @@
 # Quine
 
+Start every session by reading `HANDOVER.md` at the repository root and following its opening instructions.
+
 This repository is a Laravel package. Keep the package focused, idiomatic, and easy for Laravel developers to install, test, and maintain.
 
 ## Package Conventions
