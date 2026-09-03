@@ -142,7 +142,17 @@ final class Summary
 
         if ($missing !== []) {
             $this->command->line('  <fg=yellow>tia cache is stale: '.count($missing).' test files are not in it ('.implode(', ', array_map('basename', $missing)).'): re-run vendor/bin/pest --tia</>');
+
+            return;
         }
+
+        $tests = [];
+
+        foreach ($this->graph->coverage as $covering) {
+            $tests = [...$tests, ...$this->strings($covering)];
+        }
+
+        $this->command->line('  tia cache is fresh: '.count(array_unique($tests)).' test files');
     }
 
     /**

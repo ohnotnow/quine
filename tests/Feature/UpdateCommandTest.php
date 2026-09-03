@@ -63,3 +63,13 @@ it('prints nothing when quiet but still writes the graph', function () {
     expect(Artisan::output())->toBe('')
         ->and(config()->string('quine.graph_path'))->toBeFile();
 });
+
+it('says the tia cache is fresh when every test on disk is in it', function () {
+    $tests = dirname(config()->string('quine.graph_path')).'/tests';
+    mkdir($tests, 0755, true);
+    config()->set('quine.paths.tests', $tests);
+
+    $this->artisan('quine:update')
+        ->expectsOutputToContain('tia cache is fresh: 1 test files')
+        ->assertSuccessful();
+});
