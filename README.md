@@ -26,30 +26,41 @@ You may publish all of the package's resources at once:
 php artisan vendor:publish --tag="quine"
 ```
 
-Or, you may publish each resource individually:
-
-### Publishing the Configuration File
+The only publishable resource is the configuration file:
 
 ```bash
 php artisan vendor:publish --tag="quine-config"
 ```
 
-### Publishing and Running the Migrations
-
-```bash
-php artisan vendor:publish --tag="quine-migrations"
-php artisan migrate
-```
-
-### Publishing the Public Assets
-
-```bash
-php artisan vendor:publish --tag="quine-assets"
-```
-
 ## Usage
 
 <!-- Add a basic usage example here. -->
+
+## Claude Code hook
+
+quine ships a PostToolUse hook for Claude Code. After every Write or Edit inside a Laravel app that has quine installed, it runs `php artisan quine:nudge <file>` and, only when a recipe has something to say, hands that back to the agent as additional context. An ordinary edit produces nothing: a nudge that fires on every edit becomes wallpaper, so silence is the default and a nudge earns its place by carrying the reason and the coverage gap.
+
+Add this to the `hooks` block of `~/.claude/settings.json`, merging with any PostToolUse entries you already have:
+
+```json
+{
+    "hooks": {
+        "PostToolUse": [
+            {
+                "matcher": "Write|Edit",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "php /path/to/your/app/vendor/ohwhatnow/quine/hooks/claude-code/post-edit.php"
+                    }
+                ]
+            }
+        ]
+    }
+}
+```
+
+The script needs no Composer autoload and finds the Laravel app by walking up from the edited file to the nearest `artisan`, so one copy serves every project: copy `hooks/claude-code/post-edit.php` somewhere permanent (say `~/.claude/hooks/quine-post-edit.php`) and point the command at that instead of a path inside one app's `vendor`. It does nothing for files outside a Laravel app, or inside an app that does not have quine installed.
 
 ## Changelog
 
