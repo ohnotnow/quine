@@ -1,0 +1,144 @@
+ MODELS .. relations, hooks, accessors 
+ App\Models\Activity (activities)
+ user(): BelongsTo -> User NULLABLE activities.user_id
+ note(): BelongsTo -> Note not null activities.note_id
+ on creating -> closure app/Models/Activity.php:32
+ casts: id=int, action=ActivityAction
+ App\Models\Channel (channels)
+ users(): BelongsToMany -> User via channel_user
+ subscribers(): BelongsToMany -> User via channel_user
+ notes(): BelongsToMany -> Note via channel_note
+ casts: id=int
+ App\Models\Note (notes)
+ user(): BelongsTo -> User not null notes.user_id
+ channels(): BelongsToMany -> Channel via channel_note
+ activities(): HasMany -> Activity activities.note_id
+ on creating -> closure app/Models/Note.php:59
+ on created -> closure app/Models/Note.php:69
+ on updated -> closure app/Models/Note.php:71
+ on deleted -> closure app/Models/Note.php:79
+ on restored -> closure app/Models/Note.php:81
+ accessors: rendered_body
+ casts: id=int, last_read_at=datetime, deleted_at=datetime
+ App\Models\OAuthUser (users)
+ clients(): HasMany -> Client oauth_clients.user_id
+ oauthApps(): MorphMany -> Client oauth_clients.owner_id
+ tokens(): HasMany -> Token oauth_access_tokens.user_id
+ casts: id=int
+ App\Models\User (users)
+ notes(): HasMany -> Note notes.user_id
+ channels(): BelongsToMany -> Channel via channel_user
+ subscribedChannels(): BelongsToMany -> Channel via channel_user
+ defaultNoteChannels(): BelongsToMany -> Channel via channel_user
+ accessors: full_name
+ casts: id=int, email_verified_at=datetime, password=hashed, is_admin=boolean, is_staff=boolean, must_change_password=boolean
+
+ HIDDEN EDGES .. events, gates, schedule 
+ App\Events\NoteActivityHappened --queued listener--> App\Listeners\RecordActivity@handle
+ gate:admin --defined by--> closure app/Providers/AppServiceProvider.php:28
+
+ PAGES .. route -> handler -> view (tests rendering it) 
+ route GET|HEAD /api/v1/notes [api.v1.notes.index] -> NoteController
+ route POST /api/v1/notes [api.v1.notes.store] -> NoteController
+ route GET|HEAD /api/v1/notes/{note} [api.v1.notes.show] -> NoteController
+ route PUT|PATCH /api/v1/notes/{note} [api.v1.notes.update] -> NoteController
+ route DELETE /api/v1/notes/{note} [api.v1.notes.destroy] -> NoteController
+ route GET|HEAD /api/v1/channels [api.v1.channels.index] -> ChannelController
+ route GET|HEAD /api/v1/export [api.v1.export] -> ExportController
+ route GET|HEAD /login [login] -> SSOController
+ route POST /login [login.local] -> SSOController
+ route GET|HEAD /login/sso [login.sso] -> SSOController
+ route GET|HEAD /auth/callback [sso.callback] -> SSOController
+ route POST /logout [auth.logout] -> SSOController
+ route GET|HEAD /logged-out [logged_out] -> SSOController
+ route GET|HEAD // [home] -> NotesIndex
+ resources/views/livewire/notes-index.blade.php (7 test files)
+ <livewire> NoteForm
+ @can('admin')
+ route GET|HEAD /notes/{note} [notes.show] -> NoteShow
+ resources/views/livewire/note-show.blade.php (2 test files)
+ <livewire> NoteForm
+ route GET|HEAD /tidy [tidy] -> TidyNotes
+ resources/views/livewire/tidy-notes.blade.php (1 test files)
+ @can('admin')
+ route GET|HEAD /settings/api-tokens [api-tokens] -> ApiTokens
+ resources/views/livewire/api-tokens.blade.php (1 test files)
+ @can('admin')
+ route GET|HEAD /settings/channels [channel-settings] -> ChannelSettings
+ resources/views/livewire/channel-settings.blade.php (1 test files)
+ route GET|HEAD /settings/password [change-password] -> ChangePassword
+ resources/views/livewire/change-password.blade.php (1 test files)
+ route GET|HEAD /admin/users [admin.users] -> Users
+ resources/views/livewire/admin/users.blade.php (2 test files)
+ route GET|HEAD /admin/channels [admin.channels] -> Channels
+ resources/views/livewire/admin/channels.blade.php (1 test files)
+ route GET|HEAD /admin/export [admin.export] -> ExportController
+ route GET|HEAD /admin/import [admin.import] -> ImportNotes
+ resources/views/livewire/admin/import-notes.blade.php (1 test files)
+ route GET|HEAD /admin/activity [admin.activity] -> ActivityLog
+ resources/views/livewire/admin/activity-log.blade.php (2 test files)
+
+ NUDGES .. nullable foreign keys 
+ Activity->user can be null (activities.user_id is nullable)
+ migration: 2026_08_18_175929_create_activities_table.php:14 $table->foreignId('user_id')->nullable()->constrained()->nullOnDelete();
+ every ->user-> dereference found is null-safe
+ no factory, seeder or test ever creates a Activity with a null user - a green suite proves nothing about that path
+
+ NEIGHBOURHOOD .. App\Models\Note 
+ <- [relation: note() BelongsTo] App\Models\Activity app/Models/Activity.php:46
+ <- [relation: notes() BelongsToMany] App\Models\Channel app/Models/Channel.php:30
+ -> [relation: user() BelongsTo] App\Models\User app/Models/Note.php:85
+ -> [model-event: creating] closure app/Models/Note.php:59
+ -> [model-event: created] closure app/Models/Note.php:69
+ -> [model-event: updated] closure app/Models/Note.php:71
+ -> [model-event: deleted] closure app/Models/Note.php:79
+ -> [model-event: restored] closure app/Models/Note.php:81
+ <- [uses: uses] App\Http\Controllers\Admin\ExportController app/Http/Controllers/Admin/ExportController.php:6
+ <- [uses: uses] App\Http\Controllers\Api\V1\ExportController app/Http/Controllers/Api/V1/ExportController.php:6
+ <- [uses: uses] App\Http\Controllers\Api\V1\NoteController app/Http/Controllers/Api/V1/NoteController.php:7
+ <- [uses: uses] App\Http\Resources\ExportNoteResource app/Http/Resources/ExportNoteResource.php:6
+ <- [uses: uses] App\Http\Resources\NoteResource app/Http/Resources/NoteResource.php:5
+ <- [uses: uses] App\Jobs\ImportNotes app/Jobs/ImportNotes.php:7
+ <- [uses: uses] App\Livewire\Admin\ImportNotes app/Livewire/Admin/ImportNotes.php:7
+ <- [uses: uses] App\Livewire\NoteForm app/Livewire/NoteForm.php:6
+ <- [uses: uses] App\Livewire\NoteShow app/Livewire/NoteShow.php:5
+ <- [uses: uses] App\Livewire\NotesIndex app/Livewire/NotesIndex.php:6
+ <- [uses: uses] App\Livewire\TidyNotes app/Livewire/TidyNotes.php:5
+ <- [uses: uses] App\Mcp\Servers\DevnotesServer app/Mcp/Servers/DevnotesServer.php:9
+ <- [uses: uses] App\Mcp\Tools\AddNote app/Mcp/Tools/AddNote.php:6
+ <- [uses: uses] App\Mcp\Tools\GetNote app/Mcp/Tools/GetNote.php:5
+ <- [uses: uses] App\Mcp\Tools\SearchNotes app/Mcp/Tools/SearchNotes.php:5
+ <- [uses: uses] App\Mcp\Tools\UpdateNote app/Mcp/Tools/UpdateNote.php:5
+ -> [uses: uses] App\Enums\ActivityAction app/Models/Note.php:5
+ -> [uses: uses] App\Events\NoteActivityHappened app/Models/Note.php:6
+ -> [model-event: creating] closure app/Models/Activity.php:32
+ <- [uses: uses] App\Listeners\RecordActivity app/Listeners/RecordActivity.php:6
+ <- [uses: uses] App\Livewire\Admin\ActivityLog app/Livewire/Admin/ActivityLog.php:6
+ <- [uses: uses] App\Http\Controllers\Api\V1\ChannelController app/Http/Controllers/Api/V1/ChannelController.php:7
+ <- [uses: uses] App\Http\Resources\ChannelResource app/Http/Resources/ChannelResource.php:5
+ <- [uses: uses] App\Livewire\Admin\Channels app/Livewire/Admin/Channels.php:5
+ <- [uses: uses] App\Livewire\Admin\Users app/Livewire/Admin/Users.php:5
+ <- [uses: uses] App\Livewire\ChannelSettings app/Livewire/ChannelSettings.php:5
+ <- [uses: uses] App\Http\Controllers\Auth\SSOController app/Http/Controllers/Auth/SSOController.php:6
+ <- [uses: uses] App\Providers\AppServiceProvider app/Providers/AppServiceProvider.php:5
+ <- [route: livewire page web,auth,App\Http\Middleware\RequirePasswordChange,can:admin] route GET|HEAD /admin/export [admin.export]
+ -> [uses: uses] App\Http\Controllers\Controller app/Http/Controllers/Admin/ExportController.php:5
+ <- [route: livewire page api,auth:sanctum,throttle:api,can:admin] route GET|HEAD /api/v1/export [api.v1.export]
+ <- [route: index api,auth:sanctum,throttle:api] route GET|HEAD /api/v1/notes [api.v1.notes.index]
+ <- [route: store api,auth:sanctum,throttle:api] route POST /api/v1/notes [api.v1.notes.store]
+ <- [route: show api,auth:sanctum,throttle:api] route GET|HEAD /api/v1/notes/{note} [api.v1.notes.show]
+ <- [route: update api,auth:sanctum,throttle:api] route PUT|PATCH /api/v1/notes/{note} [api.v1.notes.update]
+ <- [route: destroy api,auth:sanctum,throttle:api] route DELETE /api/v1/notes/{note} [api.v1.notes.destroy]
+ <- [uses: uses] App\Console\Commands\ImportNotesCommand app/Console/Commands/ImportNotesCommand.php:5
+ <- [route: livewire page web,auth,App\Http\Middleware\RequirePasswordChange,can:admin] route GET|HEAD /admin/import [admin.import]
+ -> [renders: livewire.admin.import-notes] resources/views/livewire/admin/import-notes.blade.php app/Livewire/Admin/ImportNotes.php:31
+ -> [renders: livewire.note-form] resources/views/livewire/note-form.blade.php app/Livewire/NoteForm.php:29
+ <- [livewire: <livewire:note-form>] resources/views/livewire/note-show.blade.php resources/views/livewire/note-show.blade.php:58
+ <- [livewire: <livewire:note-form>] resources/views/livewire/notes-index.blade.php resources/views/livewire/notes-index.blade.php:78
+ <- [route: livewire page web,auth,App\Http\Middleware\RequirePasswordChange] route GET|HEAD /notes/{note} [notes.show]
+ <- [route: livewire page web,auth,App\Http\Middleware\RequirePasswordChange] route GET|HEAD // [home]
+ <- [route: livewire page web,auth,App\Http\Middleware\RequirePasswordChange] route GET|HEAD /tidy [tidy]
+ -> [renders: livewire.tidy-notes] resources/views/livewire/tidy-notes.blade.php app/Livewire/TidyNotes.php:24
+ -> [event: queued listener] App\Listeners\RecordActivity@handle
+
+592 edges written to storage/app/code-understanding.json

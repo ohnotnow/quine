@@ -1,5 +1,8 @@
 {
     "preset": "laravel",
+    "exclude": [
+        "reference"
+    ],
     "rules": {
         "no_extra_blank_lines": {
             "tokens": [
