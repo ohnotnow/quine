@@ -8,6 +8,8 @@ use Workbench\App\Listeners\NotifyEditors;
 use Workbench\App\Models\Author;
 use Workbench\App\Models\Comment;
 use Workbench\App\Models\Post;
+use Workbench\App\Models\Tag;
+use Workbench\App\Policies\PostPolicy;
 
 it('prints the labelled neighbourhood of a model in both directions with breadcrumbs', function () {
     $this->artisan('quine:update')->assertSuccessful();
@@ -28,6 +30,26 @@ it('prints the recipe nudges for the node under NUDGES', function () {
         ->assertSuccessful();
 });
 
+it('prints the nudges of models one relation hop away, so a nullable key on a neighbour is not missed', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    // Post has no nullable belongsTo of its own; Comment, one hop away, does.
+    $this->artisan('quine:ask', ['node' => Post::class])
+        ->expectsOutputToContain('no factory, seeder or test ever creates a Comment with a null author')
+        ->doesntExpectOutputToContain('nothing to add')
+        ->assertSuccessful();
+});
+
+it('stops the nudge fan-out at one hop', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    // Tag reaches Comment only through Post: two hops.
+    $this->artisan('quine:ask', ['node' => Tag::class])
+        ->doesntExpectOutputToContain('null author')
+        ->expectsOutputToContain('nothing to add')
+        ->assertSuccessful();
+});
+
 it('resolves a class basename, and fails plainly when nothing matches', function () {
     $this->artisan('quine:update')->assertSuccessful();
 
@@ -43,13 +65,39 @@ it('resolves a class basename, and fails plainly when nothing matches', function
 it('reaches a queued listener two hops away through the event, printing each edge once under the node it hangs off', function () {
     $this->artisan('quine:update')->assertSuccessful();
 
-    Artisan::call('quine:ask', ['node' => Post::class]);
+    Artisan::call('quine:ask', ['node' => Post::class, '--full' => true]);
     $output = Artisan::output();
 
-    expect(substr_count($output, '-> [uses: uses (heuristic: static reference)] '.PostPublished::class))->toBe(1)
+    expect(substr_count($output, '-> [uses: static reference (heuristic)] '.PostPublished::class))->toBe(1)
         ->and(substr_count($output, '-> [event: queued listener] '.NotifyEditors::class.'@handle'))->toBe(1)
         ->and($output)->toContain('    via '.PostPublished::class.":\n        -> [event: queued listener] ".NotifyEditors::class.'@handle')
         ->and($output)->not->toContain('via '.Post::class.':');
+});
+
+it('collapses uses edges to a count by default, but still walks through them', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    Artisan::call('quine:ask', ['node' => Post::class]);
+    $output = Artisan::output();
+
+    expect($output)->toContain('<- referenced by 4 classes (uses; --full lists them)')
+        ->and($output)->toContain('-> references 1 class (uses; --full lists them)')
+        ->and($output)->not->toContain('PostController.php:6')
+        ->and($output)->toContain('    via '.PostPublished::class.":\n        -> [event: queued listener] ".NotifyEditors::class.'@handle')
+        // PostPolicy's only edge beyond the root is a uses edge: a via block holding nothing but a count is padding.
+        ->and($output)->not->toContain('via '.PostPolicy::class.':');
+});
+
+it('lists every uses edge in place with --full, after the surprising kinds', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    Artisan::call('quine:ask', ['node' => Post::class, '--full' => true]);
+    $output = Artisan::output();
+
+    expect($output)->toContain('<- [uses: static reference (heuristic)] Workbench\\App\\Http\\Controllers\\PostController  workbench/app/Http/Controllers/PostController.php:6')
+        ->and($output)->not->toContain('referenced by')
+        ->and($output)->toContain('via '.PostPolicy::class.':')
+        ->and(strpos($output, '[model-event: created]'))->toBeLessThan(strpos($output, '[uses: static reference'));
 });
 
 it('builds the graph first when there is none on disk', function () {

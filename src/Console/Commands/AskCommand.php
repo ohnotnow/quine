@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ohwhatnow\Quine\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Str;
 use Ohwhatnow\Quine\Change;
 use Ohwhatnow\Quine\Graph;
 use Ohwhatnow\Quine\GraphBuilder;
@@ -16,7 +17,7 @@ class AskCommand extends Command
     /**
      * The command signature.
      */
-    protected $signature = 'quine:ask {node : A class name, class basename, or file path} {--depth=2 : How many hops to walk}';
+    protected $signature = 'quine:ask {node : A class name, class basename, or file path} {--depth=2 : How many hops to walk} {--full : List every uses edge instead of a count}';
 
     /**
      * The command description.
@@ -27,6 +28,12 @@ class AskCommand extends Command
      * Edge kinds too noisy for a neighbourhood.
      */
     private const array SKIP = ['reads', 'flux'];
+
+    /**
+     * Print order: the kinds nobody would find by reading one file come first,
+     * plain static references last.
+     */
+    private const array ORDER = ['relation', 'model-event', 'event', 'gate', 'policy', 'schedule', 'livewire', 'component', 'include', 'route', 'renders', 'uses'];
 
     public function handle(GraphBuilder $builder, Project $project, Registry $recipes): int
     {
@@ -43,7 +50,13 @@ class AskCommand extends Command
         $this->newLine();
         $this->components->twoColumnDetail('<fg=yellow>NUDGES</>', 'what to check before you edit');
 
-        $nudges = $recipes->nudges(Change::forNode($node), $graph);
+        $nudges = [];
+
+        foreach ($this->modelsWithin($node, $graph) as $model) {
+            $nudges = [...$nudges, ...$recipes->nudges(Change::forNode($model), $graph)];
+        }
+
+        $nudges = array_values(array_unique($nudges));
 
         foreach ($nudges === [] ? ['nothing to add'] : $nudges as $nudge) {
             $this->line('    '.$nudge);
@@ -63,6 +76,28 @@ class AskCommand extends Command
         $this->line('no graph at '.$project->relative($project->graphPath).', built it first');
 
         return $graph;
+    }
+
+    /**
+     * The node itself when it is a model, plus every model one relation hop
+     * away in either direction: a nullable key on a neighbour is exactly the
+     * kind of thing a reader of the asked-for model would miss.
+     *
+     * @return list<string>
+     */
+    private function modelsWithin(string $node, Graph $graph): array
+    {
+        $models = array_key_exists($node, $graph->models) ? [$node] : [];
+
+        foreach ($graph->edgesFrom($node, 'relation') as $edge) {
+            $models[] = $edge['to'];
+        }
+
+        foreach ($graph->edgesTo($node, 'relation') as $edge) {
+            $models[] = $edge['from'];
+        }
+
+        return array_values(array_unique(array_filter($models, fn (string $model) => array_key_exists($model, $graph->models))));
     }
 
     /**
@@ -114,13 +149,15 @@ class AskCommand extends Command
      * Breadth-first over the edges in both directions, printing each edge once,
      * indented by the hop at which it was reached. Beyond the root, the edges
      * of each expanded node sit under a "via <node>:" line so a deeper edge
-     * always says where it hangs off.
+     * always says where it hangs off. Within a node the edges are grouped by
+     * kind in ORDER, and uses edges collapse to a count unless --full.
      */
     private function walk(string $start, Graph $graph, int $maxDepth): void
     {
         $depth = [$start => 0];
         $queue = [$start];
         $printed = [];
+        $full = (bool) $this->option('full');
 
         while ($queue !== []) {
             $current = array_shift($queue);
@@ -130,7 +167,7 @@ class AskCommand extends Command
                 continue;
             }
 
-            $lines = [];
+            $found = [];
 
             foreach ($graph->edges as $index => $edge) {
                 if (isset($printed[$index]) || in_array($edge['kind'], self::SKIP, true)) {
@@ -148,12 +185,43 @@ class AskCommand extends Command
                 }
 
                 $printed[$index] = true;
-                $lines[] = str_repeat('    ', $hop)."$arrow [{$edge['kind']}: {$edge['label']}] $other".($edge['at'] === null ? '' : "  <fg=gray>{$edge['at']}</>");
+                $found[] = [$arrow, $other, $edge];
 
                 if (! isset($depth[$other])) {
                     $depth[$other] = $hop;
                     $queue[] = $other;
                 }
+            }
+
+            usort($found, fn (array $a, array $b) => $this->rank($a[2]['kind']) <=> $this->rank($b[2]['kind']));
+
+            $lines = [];
+            $collapsed = ['<-' => 0, '->' => 0];
+            $onlyCounts = $current !== $start;
+
+            foreach ($found as [$arrow, $other, $edge]) {
+                if ($edge['kind'] === 'uses' && ! $full) {
+                    $collapsed[$arrow]++;
+
+                    continue;
+                }
+
+                $onlyCounts = false;
+                $lines[] = str_repeat('    ', $hop)."$arrow [{$edge['kind']}: {$edge['label']}] $other".($edge['at'] === null ? '' : "  <fg=gray>{$edge['at']}</>");
+            }
+
+            // Beyond the root, a block holding nothing but counts is padding: the
+            // root's own count already covers those classes.
+            if ($onlyCounts) {
+                continue;
+            }
+
+            if ($collapsed['<-'] > 0) {
+                $lines[] = str_repeat('    ', $hop).'<fg=gray><- referenced by '.$collapsed['<-'].' '.Str::plural('class', $collapsed['<-']).' (uses; --full lists them)</>';
+            }
+
+            if ($collapsed['->'] > 0) {
+                $lines[] = str_repeat('    ', $hop).'<fg=gray>-> references '.$collapsed['->'].' '.Str::plural('class', $collapsed['->']).' (uses; --full lists them)</>';
             }
 
             if ($lines !== [] && $current !== $start) {
@@ -164,5 +232,12 @@ class AskCommand extends Command
                 $this->line($line);
             }
         }
+    }
+
+    private function rank(string $kind): int
+    {
+        $rank = array_search($kind, self::ORDER, true);
+
+        return $rank === false ? count(self::ORDER) : $rank;
     }
 }

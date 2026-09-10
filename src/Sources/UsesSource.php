@@ -29,7 +29,7 @@ final class UsesSource implements Source
                 }
 
                 $seen[$to] = true;
-                $graph->edge($from, $to, 'uses', 'uses (heuristic: static reference)', "$path:$line");
+                $graph->edge($from, $to, 'uses', 'static reference (heuristic)', "$path:$line");
             }
         }
     }
