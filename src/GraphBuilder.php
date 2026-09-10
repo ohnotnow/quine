@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine;
+namespace Ohffs\Quine;
 
-use Ohwhatnow\Quine\Sources\Source;
+use Ohffs\Quine\Sources\Source;
 
 final readonly class GraphBuilder
 {

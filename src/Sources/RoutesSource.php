@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
 use Illuminate\Routing\Router;
 use Illuminate\Support\Str;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
 
 /**
  * Routes to the app classes that handle them, with the middleware they run under.

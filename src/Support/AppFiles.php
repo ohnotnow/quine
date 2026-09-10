@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Support;
+namespace Ohffs\Quine\Support;
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Project;
 use Symfony\Component\Finder\SplFileInfo;
 
 final class AppFiles

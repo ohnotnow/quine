@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Tests\TestCase;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Tests\TestCase;
 
 uses(TestCase::class)->in(__DIR__);
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine;
+namespace Ohffs\Quine;
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Process;

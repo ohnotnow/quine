@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\File;
-use Ohwhatnow\Quine\Fingerprint;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Fingerprint;
+use Ohffs\Quine\Project;
 
 beforeEach(function () {
     $this->root = dirname(config()->string('quine.graph_path')).'/project';

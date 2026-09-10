@@ -15,15 +15,18 @@ Tell me the open questions in the handover note before doing anything.
 
 - Phases 1 to 3 and the devnotes comparison (5.1) are done. `quine:update`,
   `quine:ask`, `quine:nudge`, the nullable belongsTo recipe and the post-edit
-  hook script all exist. 77 tests green at commit `5a71580`; 81 with the uncommitted phase 6 work.
+  hook script all exist. 85 tests green.
 - quine is installed in `../devnotes` as a symlinked path repository, so
   edits here show up there at once. Run the artisan commands from
   `/Users/billy/Documents/code/devnotes` to see real output.
-- Phase 6 is done, uncommitted: `quine:ask` prints nudges for the model and
-  its relation neighbours, orders edges by how hidden they are, collapses
-  `uses` edges to a count unless `--full`. 81 tests green. The user commits.
-- Next, in order: the hook's manual check (3.2); the URL change (5.3); the
-  README rewrite (5.2). Exact commands and traps are in the handover note.
+- Phase 6 is committed (f13e645): `quine:ask` prints nudges for the model
+  and its relation neighbours, orders edges by how hidden they are, collapses
+  `uses` edges to a count unless `--full`.
+- The hook is verified live in devnotes (3.2 closed). The package is renamed
+  to `ohffs/quine`, namespace `Ohffs\Quine`, GitHub `ohnotnow/quine`, and the
+  "an Activity" wording is fixed. 85 tests green.
+- Next, in order: the README rewrite (5.2), then the MCP shape conversation
+  (4.1). Exact commands and traps are in the handover note.
 
 ## Decisions made on 2026-09-10
 
@@ -35,10 +38,11 @@ Tell me the open questions in the handover note before doing anything.
 - A config `ignore` list for known-noise files is parked, not scheduled
   (`ant show quine-VXQvH`).
 - The hook's 20 second timeout stays: a full rebuild on devnotes took 0.8s.
-- Earlier decisions (2026-09-03): repository URLs change to
-  `github.com/ohnotnow/quine`, package name and namespace stay
-  `ohwhatnow/quine` (5.3); README example output comes from the package's own
-  fixture app, never a real app (5.2).
+- The package is `ohffs/quine` (the user's packagist handle), namespace
+  `Ohffs\Quine`, repository `github.com/ohnotnow/quine`. Decided today; it
+  replaces the 2026-09-03 decision to keep the old vendor name.
+- README example output comes from the package's own fixture app, never a
+  real app (5.2).
 
 ## Working rules that bit us
 

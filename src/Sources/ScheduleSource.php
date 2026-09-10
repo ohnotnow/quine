@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Str;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
 
 /**
  * Every scheduled task with its cron expression.

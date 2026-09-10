@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Recipes;
+namespace Ohffs\Quine\Recipes;
 
 use Illuminate\Contracts\Container\Container;
-use Ohwhatnow\Quine\Change;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Nudge;
+use Ohffs\Quine\Change;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Nudge;
 
 final readonly class Registry
 {

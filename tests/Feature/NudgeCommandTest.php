@@ -3,10 +3,10 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
-use Ohwhatnow\Quine\Differ;
-use Ohwhatnow\Quine\Fingerprint;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Differ;
+use Ohffs\Quine\Fingerprint;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
 
 use function Orchestra\Testbench\workbench_path;
 

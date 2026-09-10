@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Support;
+namespace Ohffs\Quine\Support;
 
 use Illuminate\Contracts\View\Factory;
 use Illuminate\View\Compilers\BladeCompiler;

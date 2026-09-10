@@ -8,7 +8,7 @@ require_once dirname(__DIR__, 2).'/hooks/claude-code/post-edit.php';
 
 beforeEach(function () {
     $this->root = dirname(config()->string('quine.graph_path')).'/host';
-    File::ensureDirectoryExists($this->root.'/vendor/ohwhatnow/quine');
+    File::ensureDirectoryExists($this->root.'/vendor/ohffs/quine');
     File::ensureDirectoryExists($this->root.'/database/migrations');
     File::put($this->root.'/artisan', '#!/usr/bin/env php');
     $this->edited = $this->root.'/database/migrations/2026_01_01_000000_create_things_table.php';

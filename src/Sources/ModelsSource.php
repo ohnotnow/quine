@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -13,9 +13,9 @@ use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Support\AppFiles;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Support\AppFiles;
 use ReflectionClass;
 use ReflectionMethod;
 use ReflectionNamedType;

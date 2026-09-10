@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
 use Illuminate\Support\Facades\Event;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Support\Describe;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Support\Describe;
 
 /**
  * The closures and observers registered on each model's Eloquent events.

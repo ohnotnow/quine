@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\File;
-use Ohwhatnow\Quine\GitDiffer;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\GitDiffer;
+use Ohffs\Quine\Project;
 
 it('returns the whole file as added lines when the directory is not a git repository', function () {
     $root = dirname(config()->string('quine.graph_path')).'/not-a-repo';

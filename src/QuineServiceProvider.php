@@ -2,25 +2,25 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine;
+namespace Ohffs\Quine;
 
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Support\ServiceProvider;
-use Ohwhatnow\Quine\Console\Commands\AskCommand;
-use Ohwhatnow\Quine\Console\Commands\NudgeCommand;
-use Ohwhatnow\Quine\Console\Commands\UpdateCommand;
-use Ohwhatnow\Quine\Recipes\Registry;
-use Ohwhatnow\Quine\Sources\BladeSource;
-use Ohwhatnow\Quine\Sources\CoverageSource;
-use Ohwhatnow\Quine\Sources\GatesSource;
-use Ohwhatnow\Quine\Sources\ListenersSource;
-use Ohwhatnow\Quine\Sources\ModelEventsSource;
-use Ohwhatnow\Quine\Sources\ModelsSource;
-use Ohwhatnow\Quine\Sources\RendersSource;
-use Ohwhatnow\Quine\Sources\RoutesSource;
-use Ohwhatnow\Quine\Sources\ScheduleSource;
-use Ohwhatnow\Quine\Sources\SchemaSource;
-use Ohwhatnow\Quine\Sources\UsesSource;
+use Ohffs\Quine\Console\Commands\AskCommand;
+use Ohffs\Quine\Console\Commands\NudgeCommand;
+use Ohffs\Quine\Console\Commands\UpdateCommand;
+use Ohffs\Quine\Recipes\Registry;
+use Ohffs\Quine\Sources\BladeSource;
+use Ohffs\Quine\Sources\CoverageSource;
+use Ohffs\Quine\Sources\GatesSource;
+use Ohffs\Quine\Sources\ListenersSource;
+use Ohffs\Quine\Sources\ModelEventsSource;
+use Ohffs\Quine\Sources\ModelsSource;
+use Ohffs\Quine\Sources\RendersSource;
+use Ohffs\Quine\Sources\RoutesSource;
+use Ohffs\Quine\Sources\ScheduleSource;
+use Ohffs\Quine\Sources\SchemaSource;
+use Ohffs\Quine\Sources\UsesSource;
 
 class QuineServiceProvider extends ServiceProvider
 {

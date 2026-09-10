@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Graph;
+use Ohffs\Quine\Graph;
 
 it('round-trips an edge through save and load', function () {
     $path = dirname(config()->string('quine.graph_path')).'/roundtrip.json';

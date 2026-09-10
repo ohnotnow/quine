@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Support\ComponentResolver;
-use Ohwhatnow\Quine\Support\Matches;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Support\ComponentResolver;
+use Ohffs\Quine\Support\Matches;
 use Symfony\Component\Finder\SplFileInfo;
 
 /**

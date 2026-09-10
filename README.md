@@ -3,11 +3,11 @@
 </div>
 
 <p align="center">
-    <a href="https://packagist.org/packages/ohwhatnow/quine"><img src="https://img.shields.io/packagist/v/ohwhatnow/quine.svg?style=flat-square" alt="Packagist"></a>
-    <a href="https://packagist.org/packages/ohwhatnow/quine"><img src="https://img.shields.io/packagist/php-v/ohwhatnow/quine.svg?style=flat-square" alt="PHP from Packagist"></a>
-    <a href="https://packagist.org/packages/ohwhatnow/quine"><img src="https://badge.laravel.cloud/badge/ohwhatnow/quine?style=flat" alt="Laravel versions"></a>
-    <a href="https://github.com/ohwhatnow/quine/actions"><img alt="GitHub Workflow Status (main)" src="https://img.shields.io/github/actions/workflow/status/ohwhatnow/quine/tests.yml?branch=main&label=Tests&style=flat-square"></a>
-    <a href="https://packagist.org/packages/ohwhatnow/quine"><img src="https://img.shields.io/packagist/dt/ohwhatnow/quine.svg?style=flat-square" alt="Total Downloads"></a>
+    <a href="https://packagist.org/packages/ohffs/quine"><img src="https://img.shields.io/packagist/v/ohffs/quine.svg?style=flat-square" alt="Packagist"></a>
+    <a href="https://packagist.org/packages/ohffs/quine"><img src="https://img.shields.io/packagist/php-v/ohffs/quine.svg?style=flat-square" alt="PHP from Packagist"></a>
+    <a href="https://packagist.org/packages/ohffs/quine"><img src="https://badge.laravel.cloud/badge/ohffs/quine?style=flat" alt="Laravel versions"></a>
+    <a href="https://github.com/ohnotnow/quine/actions"><img alt="GitHub Workflow Status (main)" src="https://img.shields.io/github/actions/workflow/status/ohffs/quine/tests.yml?branch=master&label=Tests&style=flat-square"></a>
+    <a href="https://packagist.org/packages/ohffs/quine"><img src="https://img.shields.io/packagist/dt/ohffs/quine.svg?style=flat-square" alt="Total Downloads"></a>
 </p>
 
 Gather useful stats and help AI coding agents
@@ -17,7 +17,7 @@ Gather useful stats and help AI coding agents
 You can install the package via Composer:
 
 ```bash
-composer require ohwhatnow/quine
+composer require ohffs/quine
 ```
 
 You may publish all of the package's resources at once:
@@ -51,7 +51,7 @@ Add this to the `hooks` block of `~/.claude/settings.json`, merging with any Pos
                 "hooks": [
                     {
                         "type": "command",
-                        "command": "php /path/to/your/app/vendor/ohwhatnow/quine/hooks/claude-code/post-edit.php"
+                        "command": "php /path/to/your/app/vendor/ohffs/quine/hooks/claude-code/post-edit.php"
                     }
                 ]
             }
@@ -76,7 +76,7 @@ Please review [our security policy](.github/SECURITY.md) on how to report securi
 
 ## Credits
 
-- [Ohffs](https://github.com/ohwhatnow)
+- [Ohffs](https://github.com/ohnotnow)
 - [All Contributors](../../contributors)
 
 ## License

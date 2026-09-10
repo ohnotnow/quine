@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Support\AppFiles;
-use Ohwhatnow\Quine\Support\Matches;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Support\AppFiles;
+use Ohffs\Quine\Support\Matches;
 
 /**
  * The plain static layer: which app class mentions which other app class.

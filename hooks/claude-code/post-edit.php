@@ -45,7 +45,7 @@ final class QuineHook
 
             $root = self::laravelRoot(dirname($file));
 
-            if ($root === null || ! is_dir($root.'/vendor/ohwhatnow/quine')) {
+            if ($root === null || ! is_dir($root.'/vendor/ohffs/quine')) {
                 return null;
             }
 

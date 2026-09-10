@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Recipes\NullableBelongsTo;
+use Ohffs\Quine\Recipes\NullableBelongsTo;
 
 return [
 

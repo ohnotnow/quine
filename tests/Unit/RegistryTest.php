@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Change;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Nudge;
-use Ohwhatnow\Quine\Recipes\Recipe;
-use Ohwhatnow\Quine\Recipes\Registry;
+use Ohffs\Quine\Change;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Nudge;
+use Ohffs\Quine\Recipes\Recipe;
+use Ohffs\Quine\Recipes\Registry;
 
 final class RecordingRecipe implements Recipe
 {

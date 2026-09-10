@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Change;
-use Ohwhatnow\Quine\Nudge;
-use Ohwhatnow\Quine\Recipes\NullableBelongsTo;
+use Ohffs\Quine\Change;
+use Ohffs\Quine\Nudge;
+use Ohffs\Quine\Recipes\NullableBelongsTo;
 use Workbench\App\Models\Comment;
 use Workbench\App\Models\Post;
 

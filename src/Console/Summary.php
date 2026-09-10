@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Console;
+namespace Ohffs\Quine\Console;
 
 use Illuminate\Console\Command;
 use Illuminate\Console\View\Components\Factory;
-use Ohwhatnow\Quine\Change;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Recipes\Registry;
+use Ohffs\Quine\Change;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Recipes\Registry;
 
 /**
  * The readable end of quine:update: what a developer running it by hand sees,

@@ -1,13 +1,13 @@
 {
     "$schema": "https://getcomposer.org/schema.json",
-    "name": "ohwhatnow/quine",
+    "name": "ohffs/quine",
     "description": "Gather useful stats and help AI coding agents",
     "keywords": [
         "laravel",
-        "ohwhatnow",
+        "ohffs",
         "quine"
     ],
-    "homepage": "https://github.com/ohwhatnow/quine",
+    "homepage": "https://github.com/ohnotnow/quine",
     "license": "MIT",
     "authors": [
         {
@@ -33,12 +33,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Ohwhatnow\\Quine\\": "src/"
+            "Ohffs\\Quine\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Ohwhatnow\\Quine\\Tests\\": "tests/",
+            "Ohffs\\Quine\\Tests\\": "tests/",
             "Workbench\\App\\": "workbench/app/",
             "Workbench\\Database\\Factories\\": "workbench/database/factories/",
             "Workbench\\Database\\Seeders\\": "workbench/database/seeders/"
@@ -88,7 +88,7 @@
     "extra": {
         "laravel": {
             "providers": [
-                "Ohwhatnow\\Quine\\QuineServiceProvider"
+                "Ohffs\\Quine\\QuineServiceProvider"
             ]
         }
     },

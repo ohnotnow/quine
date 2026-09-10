@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Nudge;
+use Ohffs\Quine\Nudge;
 
 it('renders as file, line and reason', function () {
     expect((string) new Nudge('a.php', 12, 'why'))->toBe('a.php:12  why');

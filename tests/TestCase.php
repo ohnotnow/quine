@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Tests;
+namespace Ohffs\Quine\Tests;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;

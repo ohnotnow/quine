@@ -2,16 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Console\Commands;
+namespace Ohffs\Quine\Console\Commands;
 
 use Illuminate\Console\Command;
-use Ohwhatnow\Quine\Change;
-use Ohwhatnow\Quine\Differ;
-use Ohwhatnow\Quine\Fingerprint;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\GraphBuilder;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Recipes\Registry;
+use Ohffs\Quine\Change;
+use Ohffs\Quine\Differ;
+use Ohffs\Quine\Fingerprint;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\GraphBuilder;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Recipes\Registry;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Throwable;
 

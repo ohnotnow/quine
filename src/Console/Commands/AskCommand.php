@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Console\Commands;
+namespace Ohffs\Quine\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Str;
-use Ohwhatnow\Quine\Change;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\GraphBuilder;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Recipes\Registry;
+use Ohffs\Quine\Change;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\GraphBuilder;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Recipes\Registry;
 
 class AskCommand extends Command
 {

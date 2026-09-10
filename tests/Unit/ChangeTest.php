@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Change;
+use Ohffs\Quine\Change;
 
 it('lists the added lines of a diff without the plus sign or the file header', function () {
     $change = Change::forFile('database/migrations/x.php', "--- a\n+++ b\n-old\n+new line");

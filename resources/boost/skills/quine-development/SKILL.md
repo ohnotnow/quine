@@ -13,7 +13,7 @@ Use this skill when a Laravel application needs to integrate the Quine package.
 
 ## Primary Goal
 
-- apply the `ohwhatnow/quine` package's public API in the smallest correct way
+- apply the `ohffs/quine` package's public API in the smallest correct way
 
 ## Workflow
 

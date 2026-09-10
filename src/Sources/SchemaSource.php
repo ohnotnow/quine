@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
 use Illuminate\Filesystem\Filesystem;
 use Larastan\Larastan\Properties\MigrationHelper;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
 use PHPStan\DependencyInjection\ContainerFactory;
 use ReflectionClass;
 

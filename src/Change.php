@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine;
+namespace Ohffs\Quine;
 
 /**
  * What is being edited (a file and its diff) or asked about (a graph node).

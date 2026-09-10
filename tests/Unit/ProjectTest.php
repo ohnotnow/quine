@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Project;
 
 use function Orchestra\Testbench\workbench_path;
 

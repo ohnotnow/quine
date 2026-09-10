@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Console\Commands;
+namespace Ohffs\Quine\Console\Commands;
 
 use Illuminate\Console\Command;
-use Ohwhatnow\Quine\Console\Summary;
-use Ohwhatnow\Quine\GraphBuilder;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Recipes\Registry;
+use Ohffs\Quine\Console\Summary;
+use Ohffs\Quine\GraphBuilder;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Recipes\Registry;
 
 class UpdateCommand extends Command
 {

@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Sources;
+namespace Ohffs\Quine\Sources;
 
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Project;
 
 interface Source
 {

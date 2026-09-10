@@ -1,7 +1,7 @@
 laravel: '@testbench'
 
 providers:
-  - Ohwhatnow\Quine\QuineServiceProvider
+  - Ohffs\Quine\QuineServiceProvider
   - Workbench\App\Providers\WorkbenchServiceProvider
 
 migrations:

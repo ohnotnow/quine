@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Support;
+namespace Ohffs\Quine\Support;
 
 final class Matches
 {
