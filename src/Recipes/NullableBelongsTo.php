@@ -2,17 +2,18 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Recipes;
+namespace Ohffs\Quine\Recipes;
 
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
-use Ohwhatnow\Quine\Change;
-use Ohwhatnow\Quine\Graph;
-use Ohwhatnow\Quine\Nudge;
-use Ohwhatnow\Quine\Project;
-use Ohwhatnow\Quine\Support\AppFiles;
-use Ohwhatnow\Quine\Support\Matches;
+use Ohffs\Quine\Change;
+use Ohffs\Quine\Graph;
+use Ohffs\Quine\Nudge;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Support\AppFiles;
+use Ohffs\Quine\Support\Describe;
+use Ohffs\Quine\Support\Matches;
 use Symfony\Component\Finder\SplFileInfo;
 
 /**
@@ -279,7 +280,7 @@ final class NullableBelongsTo implements Recipe
         return [new Nudge(
             $target['file'],
             null,
-            "no factory, seeder or test ever creates a {$target['model']} with a null {$target['relation']}: a green suite proves nothing about that path",
+            'no factory, seeder or test ever creates '.Describe::withArticle($target['model'])." with a null {$target['relation']}: a green suite proves nothing about that path",
         )];
     }
 

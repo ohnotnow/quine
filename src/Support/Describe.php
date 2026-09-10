@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Ohwhatnow\Quine\Support;
+namespace Ohffs\Quine\Support;
 
 use Closure;
-use Ohwhatnow\Quine\Project;
+use Ohffs\Quine\Project;
 use ReflectionFunction;
 
 final class Describe
@@ -34,5 +34,17 @@ final class Describe
         }
 
         return is_scalar($callable) ? (string) $callable : '';
+    }
+
+    /**
+     * "an Activity", "a Comment": by first letter, with the one common
+     * exception of a "U" said as "you".
+     */
+    public static function withArticle(string $name): string
+    {
+        $first = strtolower(substr($name, 0, 1));
+        $article = in_array($first, ['a', 'e', 'i', 'o'], true) ? 'an' : 'a';
+
+        return "$article $name";
     }
 }
