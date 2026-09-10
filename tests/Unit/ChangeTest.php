@@ -12,6 +12,12 @@ it('lists the added lines of a diff without the plus sign or the file header', f
         ->and($change->isNode())->toBeFalse();
 });
 
+it('lists every line inside the hunks, context included, without headers or signs', function () {
+    $change = Change::forFile('app/Models/X.php', "--- a/x\n+++ b/x\n@@ -1,3 +1,3 @@\n kept\n-old\n+new\n");
+
+    expect($change->nearbyLines())->toBe(['kept', 'old', 'new']);
+});
+
 it('describes a node being asked about', function () {
     $change = Change::forNode('App\Models\Note');
 

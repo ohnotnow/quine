@@ -43,14 +43,47 @@ final readonly class Change
      */
     public function addedLines(): array
     {
-        $added = [];
+        return $this->linesMarked('+');
+    }
+
+    /**
+     * Every line inside the diff's hunks, changed or context, without its
+     * leading sign. A change is judged by what it sits beside: an edit in the
+     * body of a relation method has that method's declaration within the
+     * three context lines git prints.
+     *
+     * @return list<string>
+     */
+    public function nearbyLines(): array
+    {
+        $lines = [];
 
         foreach (preg_split('/\R/', $this->diff ?? '') ?: [] as $line) {
-            if (str_starts_with($line, '+') && ! str_starts_with($line, '+++')) {
-                $added[] = substr($line, 1);
+            if ($line === '' || str_starts_with($line, '@@') || str_starts_with($line, '+++') || str_starts_with($line, '---')) {
+                continue;
+            }
+
+            if (in_array($line[0], [' ', '+', '-'], true)) {
+                $lines[] = substr($line, 1);
             }
         }
 
-        return $added;
+        return $lines;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function linesMarked(string $sign): array
+    {
+        $lines = [];
+
+        foreach (preg_split('/\R/', $this->diff ?? '') ?: [] as $line) {
+            if (str_starts_with($line, $sign) && ! str_starts_with($line, $sign.$sign.$sign)) {
+                $lines[] = substr($line, 1);
+            }
+        }
+
+        return $lines;
     }
 }

@@ -65,11 +65,33 @@ final class NullableBelongsTo implements Recipe
 
         foreach ($graph->models as $class => $model) {
             if (is_array($model) && ($model['file'] ?? null) === $change->path) {
-                return $this->nullableRelations($graph, [$class]);
+                return array_values(array_filter(
+                    $this->nullableRelations($graph, [$class]),
+                    fn (array $target) => $this->diffMentions($change, $target),
+                ));
             }
         }
 
         return [];
+    }
+
+    /**
+     * Whether an edit to the model is about this relation: its method or its
+     * column appears in or beside the changed lines. Any other edit to the
+     * file is not about the nullable key, and saying so every time would be
+     * wallpaper.
+     *
+     * @param  Target  $target
+     */
+    private function diffMentions(Change $change, array $target): bool
+    {
+        foreach ($change->nearbyLines() as $line) {
+            if (str_contains($line, $target['relation'].'(') || str_contains($line, $target['column'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

@@ -45,6 +45,27 @@ it('drops the fixture-gap nudge once a fixture produces the null state', functio
         ->and(implode("\n", $reasons))->toContain('can be null:')->toContain('without null-safety')->not->toContain('no factory, seeder or test');
 });
 
+it('stays silent for a model edit whose diff does not touch the nullable relation', function () {
+    $model = 'workbench/app/Models/Comment.php';
+    $diff = "--- a/$model\n+++ b/$model\n@@ -34,5 +34,5 @@\n     public function getExcerptAttribute(): string\n     {\n-        return Str::limit(\$this->body, 40);\n+        return Str::limit(\$this->body, 50);\n     }\n";
+
+    expect(app(NullableBelongsTo::class)->nudges(Change::forFile($model, $diff), updatedGraph()))->toBe([]);
+});
+
+it('nudges for a model edit in or beside the relation method, or naming its column', function () {
+    $graph = updatedGraph();
+    $model = 'workbench/app/Models/Comment.php';
+    $fromNode = array_map('strval', app(NullableBelongsTo::class)->nudges(Change::forNode(Comment::class), $graph));
+
+    // An edit inside the method body: git's context lines carry the declaration.
+    $insideMethod = "--- a/$model\n+++ b/$model\n@@ -24,4 +24,4 @@\n     public function author(): BelongsTo\n     {\n-        return \$this->belongsTo(Author::class);\n+        return \$this->belongsTo(Author::class)->withDefault();\n     }\n";
+    $namesColumn = "--- a/$model\n+++ b/$model\n@@ -12,0 +13,1 @@\n+    protected \$fillable = ['author_id', 'body'];\n";
+
+    expect(array_map('strval', app(NullableBelongsTo::class)->nudges(Change::forFile($model, $insideMethod), $graph)))->toBe($fromNode)
+        ->and(array_map('strval', app(NullableBelongsTo::class)->nudges(Change::forFile($model, $namesColumn), $graph)))->toBe($fromNode)
+        ->and($fromNode)->not->toBeEmpty();
+});
+
 it('stays silent for a file that is neither a migration nor a model', function () {
     expect(app(NullableBelongsTo::class)->nudges(Change::forFile('workbench/app/Http/Controllers/PostController.php', ''), updatedGraph()))->toBe([]);
 });
