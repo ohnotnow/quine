@@ -7,41 +7,48 @@ is the front door to them.
 ## Open a session with
 
 ```
-Run `ant foundation`, then `ant show quine-mjBCN` (the handover note), then `ait ready`.
+Run `ant foundation`, then `ant show quine-mjBCN` (the handover note, read to the end: it has dated updates appended), then `ait ready`.
 Tell me the open questions in the handover note before doing anything.
 ```
 
-## Where things stand (morning of 2026-09-04)
+## Where things stand (evening of 2026-09-10)
 
-- Phases 1 to 3 of initiative `quine-UkLWZ` are done: `quine:update`,
+- Phases 1 to 3 and the devnotes comparison (5.1) are done. `quine:update`,
   `quine:ask`, `quine:nudge`, the nullable belongsTo recipe and the post-edit
-  hook script all exist, built one failing test at a time against the
-  workbench fixture app. 76 tests, PHPStan level 7, Pint and 100% type
-  coverage, all green at commit `bd9d706`.
-- Published at https://github.com/ohnotnow/quine on branch `spike/1`.
-- Next, in order: the user runs `composer test`; install into the sister app
-  and compare with `reference/devnotes-spike-report.txt` (task 5.1); the
-  hook's manual check (3.2, blocked on 5.1); the URL change (5.3); the README
-  rewrite (5.2). Exact commands and traps are in the handover note.
+  hook script all exist. 77 tests green at commit `5a71580`; 81 with the uncommitted phase 6 work.
+- quine is installed in `../devnotes` as a symlinked path repository, so
+  edits here show up there at once. Run the artisan commands from
+  `/Users/billy/Documents/code/devnotes` to see real output.
+- Phase 6 is done, uncommitted: `quine:ask` prints nudges for the model and
+  its relation neighbours, orders edges by how hidden they are, collapses
+  `uses` edges to a count unless `--full`. 81 tests green. The user commits.
+- Next, in order: the hook's manual check (3.2); the URL change (5.3); the
+  README rewrite (5.2). Exact commands and traps are in the handover note.
 
-## Decisions made late on 2026-09-03
+## Decisions made on 2026-09-10
 
-- Repository URLs (composer homepage, README badges, CHANGELOG links) change to
-  `github.com/ohnotnow/quine`. The package name and namespace stay
-  `ohwhatnow/quine`. Task 5.3.
-- README example output comes from the package's own fixture app, never from a
-  real app. Noted on 5.2.
-- The hook's first nudge after a migration edit rebuilds the whole graph
-  inside a 20 second timeout. Measure `php artisan quine:update` on the sister
-  app before deciding what to do about it. Noted on 3.2.
-- The `quine:update` report now says `tia cache is fresh: N test files` when
-  the coverage cache is up to date, instead of saying nothing.
+- `quine:ask` must print nudges for the asked-for model and every model one
+  relation hop away. Without that the tool misses its whole point (6.1).
+- Default `quine:ask` output puts framework-registered edges first and
+  collapses `uses` edges to a count; `--full` lists them all, so a developer
+  can still see every spot to check in one command (6.2).
+- A config `ignore` list for known-noise files is parked, not scheduled
+  (`ant show quine-VXQvH`).
+- The hook's 20 second timeout stays: a full rebuild on devnotes took 0.8s.
+- Earlier decisions (2026-09-03): repository URLs change to
+  `github.com/ohnotnow/quine`, package name and namespace stay
+  `ohwhatnow/quine` (5.3); README example output comes from the package's own
+  fixture app, never a real app (5.2).
 
 ## Working rules that bit us
 
-- Agents cannot run composer; the user runs every composer command.
+- The user runs every composer command in this repo; check whether the agent
+  may run them in `../devnotes` (the user restarted the session on
+  2026-09-10 to allow it).
 - The agent claiming issues is `twitchy-nose`; keep the name.
 - Strict TDD, one failing test at a time. The spike in `reference/` is the
   spec, never code to copy.
 - Every closed task carries a note with what was built and where it deviated
   from its spec: `ait show <id>` before touching that area.
+- `ait note add <id> @file` stores the literal text; it does not read the
+  file. Use `"$(cat file)"`.
