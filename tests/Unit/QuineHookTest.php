@@ -29,7 +29,7 @@ it('injects the nudge as additional context when quine has something to say', fu
     $decoded = json_decode((string) $json, true);
 
     expect($decoded['hookSpecificOutput']['hookEventName'])->toBe('PostToolUse')
-        ->and($decoded['hookSpecificOutput']['additionalContext'])->toStartWith('quine: hang on.')->toContain('some nudge')
+        ->and($decoded['hookSpecificOutput']['additionalContext'])->toBe('some nudge')
         ->and($this->calls)->toBe([[['php', 'artisan', 'quine:nudge', $this->edited], $this->root, 20]]);
 });
 

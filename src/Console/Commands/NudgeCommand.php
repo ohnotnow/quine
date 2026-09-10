@@ -11,6 +11,7 @@ use Ohffs\Quine\Fingerprint;
 use Ohffs\Quine\Graph;
 use Ohffs\Quine\GraphBuilder;
 use Ohffs\Quine\Project;
+use Ohffs\Quine\Reach;
 use Ohffs\Quine\Recipes\Registry;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Throwable;
@@ -41,9 +42,18 @@ class NudgeCommand extends Command
             }
 
             $graph = $this->freshGraph($builder, $project);
+            ['gaps' => $gaps, 'hidden' => $hidden, 'notes' => $notes] = (new Reach($graph, $project))->digest($path);
+            $nudges = array_map('strval', $recipes->nudges(Change::forFile($path, $differ->diff($path)), $graph));
 
-            foreach ($recipes->nudges(Change::forFile($path, $differ->diff($path)), $graph) as $nudge) {
-                $this->line((string) $nudge);
+            if ($gaps === [] && $hidden === [] && $notes === [] && $nudges === []) {
+                return self::SUCCESS;
+            }
+
+            // "hang on" is earned by a gap, a hidden edge or a recipe; the rest is for the record.
+            $this->line(($gaps !== [] || $hidden !== [] || $nudges !== [] ? 'Quine: hang on. ' : 'Quine: fyi. ').$path);
+
+            foreach ([...$gaps, ...$hidden, ...$notes, ...$nudges] as $line) {
+                $this->line($line);
             }
         } catch (Throwable $e) {
             $output = $this->output->getOutput();

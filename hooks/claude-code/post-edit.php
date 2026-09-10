@@ -58,7 +58,7 @@ final class QuineHook
             return json_encode([
                 'hookSpecificOutput' => [
                     'hookEventName' => 'PostToolUse',
-                    'additionalContext' => "quine: hang on.\n".$nudges,
+                    'additionalContext' => $nudges,
                 ],
             ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         } catch (Throwable) {

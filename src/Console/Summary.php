@@ -130,18 +130,10 @@ final class Summary
 
     private function coverageState(): void
     {
-        $state = $this->graph->meta['coverage'] ?? 'unavailable';
+        $warning = self::coverageWarning($this->graph);
 
-        if ($state === 'unavailable') {
-            $this->command->line('  <fg=yellow>no pest tia cache found: run vendor/bin/pest --tia</>');
-
-            return;
-        }
-
-        $missing = $this->strings($this->graph->meta['coverage_missing_tests'] ?? null);
-
-        if ($missing !== []) {
-            $this->command->line('  <fg=yellow>tia cache is stale: '.count($missing).' test files are not in it ('.implode(', ', array_map('basename', $missing)).'): re-run vendor/bin/pest --tia</>');
+        if ($warning !== null) {
+            $this->command->line("  <fg=yellow>$warning</>");
 
             return;
         }
@@ -153,6 +145,24 @@ final class Summary
         }
 
         $this->command->line('  tia cache is fresh: '.count(array_unique($tests)).' test files');
+    }
+
+    /**
+     * Why the coverage overlay cannot be trusted right now, or null when it can.
+     */
+    public static function coverageWarning(Graph $graph): ?string
+    {
+        if (($graph->meta['coverage'] ?? 'unavailable') === 'unavailable') {
+            return 'no pest tia cache found: run vendor/bin/pest --tia';
+        }
+
+        $missing = array_values(array_filter(is_array($graph->meta['coverage_missing_tests'] ?? null) ? $graph->meta['coverage_missing_tests'] : [], 'is_string'));
+
+        if ($missing !== []) {
+            return 'tia cache is stale: '.count($missing).' test files are not in it ('.implode(', ', array_map('basename', $missing)).'): re-run vendor/bin/pest --tia';
+        }
+
+        return null;
     }
 
     /**
