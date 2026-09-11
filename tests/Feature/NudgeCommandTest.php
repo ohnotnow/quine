@@ -42,6 +42,22 @@ it('says nothing about an edit that only changes comments', function () {
     expect(Artisan::output())->toBe('');
 });
 
+it('says nothing about a docblock edit whose anchor text repeats the declaration it sits above', function () {
+    app()->instance(Differ::class, new FakeDiffer(''));
+    $stdin = fopen('php://memory', 'r+');
+    fwrite($stdin, json_encode(['old' => "    public function isPublished(): bool\n", 'new' => "    /**\n     * Whether the post has gone out.\n     */\n    public function isPublished(): bool\n"]));
+    rewind($stdin);
+    $input = new ArrayInput(['file' => 'workbench/app/Models/Post.php', '--edit' => true]);
+    $input->setStream($stdin);
+    $output = new BufferedOutput;
+
+    $command = app(NudgeCommand::class);
+    $command->setLaravel(app());
+    $command->run($input, $output);
+
+    expect($output->fetch())->toBe('');
+});
+
 it('prints only the coverage for a body-only edit to a model, as fyi', function () {
     app()->instance(Differ::class, new FakeDiffer("-        return \$this->created_at !== null;\n+        return \$this->exists;\n"));
 

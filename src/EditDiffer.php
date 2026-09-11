@@ -11,7 +11,8 @@ use Illuminate\Filesystem\Filesystem;
  * the editor hook hands them over. Git would show every uncommitted change to
  * the file; this shows the edit just made, with the same three lines of
  * context git prints, read from the written file, because a recipe judges a
- * change by what sits beside it.
+ * change by what sits beside it. Lines the old and new text share at either
+ * end are anchors the editor needed, not changes: they are context too.
  */
 final readonly class EditDiffer implements Differ
 {
@@ -25,14 +26,18 @@ final readonly class EditDiffer implements Differ
 
     public function diff(string $relativePath): string
     {
-        $added = $this->lines($this->new);
+        $new = $this->lines($this->new);
 
         if ($this->old === null) {
-            return implode('', array_map(fn (string $line) => "+$line\n", $added));
+            return implode('', array_map(fn (string $line) => "+$line\n", $new));
         }
 
-        $removed = $this->lines($this->old);
-        ['before' => $before, 'after' => $after] = $this->context($relativePath, $added);
+        $old = $this->lines($this->old);
+        $prefix = $this->sharedPrefix($old, $new);
+        $suffix = $this->sharedSuffix($old, $new, $prefix);
+        $removed = array_slice($old, $prefix, count($old) - $prefix - $suffix);
+        $added = array_slice($new, $prefix, count($new) - $prefix - $suffix);
+        ['before' => $before, 'after' => $after] = $this->context($relativePath, $new, $prefix, $suffix);
 
         return implode('', [
             ...array_map(fn (string $line) => " $line\n", $before),
@@ -43,34 +48,70 @@ final readonly class EditDiffer implements Differ
     }
 
     /**
-     * The lines around the first place the written text sits in the file, or
-     * nothing when the file does not hold it.
+     * The lines around the changed part of the written text: from the file
+     * when it holds the written text, else the shared lines of the edit itself.
      *
-     * @param  list<string>  $added
+     * @param  list<string>  $new
      * @return array{before: list<string>, after: list<string>}
      */
-    private function context(string $relativePath, array $added): array
+    private function context(string $relativePath, array $new, int $prefix, int $suffix): array
     {
         $files = new Filesystem;
         $absolute = $this->project->absolute($relativePath);
-
-        if ($added === [] || ! $files->isFile($absolute)) {
-            return ['before' => [], 'after' => []];
-        }
-
-        $lines = $this->lines($files->get($absolute));
-        $count = count($added);
+        $count = count($new);
+        $lines = $count > 0 && $files->isFile($absolute) ? $this->lines($files->get($absolute)) : [];
 
         foreach (array_keys($lines) as $start) {
-            if (array_slice($lines, $start, $count) === $added) {
+            if (array_slice($lines, $start, $count) === $new) {
+                $from = $start + $prefix;
+                $to = $start + $count - $suffix;
+
                 return [
-                    'before' => array_slice($lines, max(0, $start - self::CONTEXT), min($start, self::CONTEXT)),
-                    'after' => array_slice($lines, $start + $count, self::CONTEXT),
+                    'before' => array_slice($lines, max(0, $from - self::CONTEXT), min($from, self::CONTEXT)),
+                    'after' => array_slice($lines, $to, self::CONTEXT),
                 ];
             }
         }
 
-        return ['before' => [], 'after' => []];
+        return [
+            'before' => array_slice($new, max(0, $prefix - self::CONTEXT), min($prefix, self::CONTEXT)),
+            'after' => array_slice($new, $count - $suffix, self::CONTEXT),
+        ];
+    }
+
+    /**
+     * How many leading lines the old and new text share.
+     *
+     * @param  list<string>  $old
+     * @param  list<string>  $new
+     */
+    private function sharedPrefix(array $old, array $new): int
+    {
+        $shared = 0;
+
+        while ($shared < count($old) && $shared < count($new) && $old[$shared] === $new[$shared]) {
+            $shared++;
+        }
+
+        return $shared;
+    }
+
+    /**
+     * How many trailing lines the old and new text share, beyond the prefix.
+     *
+     * @param  list<string>  $old
+     * @param  list<string>  $new
+     */
+    private function sharedSuffix(array $old, array $new, int $prefix): int
+    {
+        $shared = 0;
+        $limit = min(count($old), count($new)) - $prefix;
+
+        while ($shared < $limit && $old[count($old) - 1 - $shared] === $new[count($new) - 1 - $shared]) {
+            $shared++;
+        }
+
+        return $shared;
     }
 
     /**

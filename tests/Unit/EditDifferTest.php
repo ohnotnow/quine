@@ -57,3 +57,23 @@ it('gives the bare edit when the new text is not in the file', function () {
 
     expect($differ->diff($this->path))->toBe("-old line\n+new line\n");
 });
+
+it('shows the lines old and new share as context, not as removed and added', function () {
+    $old = "    public function author()\n    {\n";
+    $new = "    /**\n     * @return BelongsTo<Author, \$this>\n     */\n    public function author()\n    {\n";
+    $absolute = $this->project->absolute($this->path);
+    File::put($absolute, str_replace($old, $new, File::get($absolute)));
+    $differ = new EditDiffer($this->project, $old, $new);
+
+    expect($differ->diff($this->path))->toBe(implode("\n", [
+        ' ',
+        ' class Scratch',
+        ' {',
+        '+    /**',
+        '+     * @return BelongsTo<Author, $this>',
+        '+     */',
+        '     public function author()',
+        '     {',
+        '         return $this->belongsTo(Author::class)->withDefault();',
+    ])."\n");
+});
