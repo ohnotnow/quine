@@ -41,6 +41,7 @@ it('walks through a cycle once and reaches the routed action beyond it', functio
         'node' => 'Workbench\App\Http\Controllers\C::show',
         'kind' => 'route GET|HEAD /c',
         'trail' => ['Workbench\App\Models\Post::isPublished', 'Workbench\App\Support\A::x', 'Workbench\App\Support\B::y'],
+        'at' => 'workbench/app/Support/A.php:10',
         'coverage' => 'no test covers workbench/app/Http/Controllers/C.php',
     ]])
         ->and($walk['frontiers'])->toBe([])
@@ -59,7 +60,7 @@ it('prints ten endpoints for the hook and points at quine:ask for the rest', fun
     $digest = (new Reach($graph, app(Project::class)))->digest(Change::forFile('workbench/app/Models/Post.php', "-    public function isPublished(): bool\n"));
 
     expect($digest['reach'])->toHaveCount(11)
-        ->and($digest['reach'][0])->toBe('reaches route GET|HEAD /c1 (C1::show) via Post::isPublished -> C1::show; no test covers workbench/app/Http/Controllers/C1.php')
+        ->and($digest['reach'][0])->toBe('reaches route GET|HEAD /c1 (C1::show) via Post::isPublished -> C1::show (at workbench/app/Http/Controllers/C1.php:10); no test covers workbench/app/Http/Controllers/C1.php')
         ->and($digest['reach'][10])->toBe('and 2 more: quine:ask Post::isPublished lists them');
 });
 
@@ -91,8 +92,34 @@ it('follows a method nobody calls, such as a resource toArray, through whoever c
 
     // Breadth first: the job is one hop away, the route three.
     expect(array_map(fn (array $endpoint) => [$endpoint['kind'], $endpoint['trail']], $walk['endpoints']))->toBe([
-        ['job, heuristic', ['Workbench\App\Models\User::full_name']],
+        ['job, by namespace', ['Workbench\App\Models\User::full_name']],
         ['route GET|HEAD /api/notes/{note}', ['Workbench\App\Models\User::full_name', 'Workbench\App\Http\Resources\NoteResource::toArray', 'Workbench\App\Http\Resources\NoteResource::__construct']],
     ])
         ->and($walk['frontiers'])->toBe([]);
+});
+
+it('prints the constructor bridge as new Class, and a namespace guess as by namespace', function () {
+    $graph = new Graph;
+    $graph->meta['coverage'] = 'ok';
+    $graph->edge('Workbench\App\Http\Resources\NoteResource::toArray', 'Workbench\App\Models\User::full_name', 'fetches', 'fetches full_name', 'workbench/app/Http/Resources/NoteResource.php:23');
+    $graph->edge('Workbench\App\Http\Controllers\NoteController::show', 'Workbench\App\Http\Resources\NoteResource::__construct', 'calls', 'new NoteResource(...)', 'workbench/app/Http/Controllers/NoteController.php:30');
+    $graph->edge('route GET|HEAD /api/notes/{note} [notes.show]', 'Workbench\App\Http\Controllers\NoteController', 'route', 'show api', null);
+    $graph->edge('Workbench\App\Mcp\Tools\GetNote::handle', 'Workbench\App\Models\User::full_name', 'fetches', 'fetches full_name', 'workbench/app/Mcp/Tools/GetNote.php:37');
+
+    expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\User::full_name')['lines'])->toBe([
+        'reaches Workbench\App\Mcp\Tools\GetNote (MCP tool, by namespace) via User::full_name -> GetNote::handle (at workbench/app/Mcp/Tools/GetNote.php:37); no test covers workbench/app/Mcp/Tools/GetNote.php',
+        'reaches route GET|HEAD /api/notes/{note} (NoteController::show) via User::full_name -> NoteResource::toArray -> new NoteResource -> NoteController::show (at workbench/app/Http/Resources/NoteResource.php:23); no test covers workbench/app/Http/Controllers/NoteController.php',
+    ]);
+});
+
+it('collapses the templates one trail reaches to a line naming what renders each', function () {
+    $graph = new Graph;
+    $graph->meta['coverage'] = 'ok';
+    $graph->edge('workbench/resources/views/a.blade.php', 'Workbench\App\Models\User::full_name', 'fetches', 'fetches full_name', 'workbench/resources/views/a.blade.php:4');
+    $graph->edge('workbench/resources/views/b.blade.php', 'Workbench\App\Models\User::full_name', 'fetches', 'fetches full_name', 'workbench/resources/views/b.blade.php:9');
+    $graph->coverage['workbench/resources/views/a.blade.php'] = ['workbench/tests/Feature/ATest.php', 'workbench/tests/Feature/AlsoTest.php'];
+
+    expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\User::full_name')['lines'])->toBe([
+        'reaches workbench/resources/views/a.blade.php:4 (ATest.php, AlsoTest.php render it), workbench/resources/views/b.blade.php:9 (no test renders this) via User::full_name; whether a test exercises your change is yours to check',
+    ]);
 });

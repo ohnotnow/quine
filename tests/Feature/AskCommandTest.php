@@ -120,7 +120,7 @@ it('prints the consumers of one member when asked for Class::member', function (
         ->and($output)->toContain(Post::class.'::isPublished')
         ->and($output)->toContain('<- [calls: calls isPublished()] Workbench\App\Http\Controllers\PostController::show  workbench/app/Http/Controllers/PostController.php:12')
         ->and($output)->toContain('REACHES')
-        ->and($output)->toContain('    reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show; no test covers workbench/app/Http/Controllers/PostSummaryController.php')
+        ->and($output)->toContain('    reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show (at workbench/app/Support/PostSummary.php:14); no test covers workbench/app/Http/Controllers/PostSummaryController.php')
         ->and($output)->toContain('    reached PostDigest::digest, nothing found that uses it')
         ->and($output)->not->toContain('NEIGHBOURHOOD');
 });

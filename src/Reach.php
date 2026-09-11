@@ -121,12 +121,23 @@ final readonly class Reach
         $templates = [];
         $more = $cap === null ? 0 : count($walk['endpoints']) - $cap;
 
-        foreach (array_slice($walk['endpoints'], 0, $cap) as $endpoint) {
-            $lines[] = $this->endpointLine($endpoint);
+        $byTrail = [];
 
-            if ($endpoint['kind'] === 'template') {
-                $templates[] = $endpoint['node'];
+        foreach (array_slice($walk['endpoints'], 0, $cap) as $endpoint) {
+            if ($endpoint['kind'] !== 'template') {
+                $lines[] = $this->endpointLine($endpoint);
+
+                continue;
             }
+
+            // The templates one trail reaches share a line, each at the line that reads the member, with what renders it.
+            $templates[] = $endpoint['node'];
+            $byTrail[implode(' -> ', $endpoint['trail'])][] = $endpoint;
+        }
+
+        foreach ($byTrail as $trail => $reached) {
+            $named = array_map(fn (array $endpoint) => "{$endpoint['at']} (".$this->templateCoverage($endpoint['node']).')', $reached);
+            $lines[] = 'reaches '.implode(', ', $named).' via '.implode(' -> ', array_map($this->short(...), explode(' -> ', $trail))).'; whether a test exercises your change is yours to check';
         }
 
         if ($more > 0) {
@@ -152,19 +163,19 @@ final readonly class Reach
      * endpoints and never walked through; the member's own class is never an
      * endpoint. Bounded by a visited set and the configured depth.
      *
-     * @return array{endpoints: list<array{node: string, kind: string, trail: list<string>, coverage: string}>, frontiers: list<string>, stopped: bool}
+     * @return array{endpoints: list<array{node: string, kind: string, trail: list<string>, at: string, coverage: string}>, frontiers: list<string>, stopped: bool}
      */
     public function walk(string $member): array
     {
         $own = Str::before($member, '::');
-        $queue = [[$member, [$member], 0]];
+        $queue = [[$member, [$member], 0, null]];
         $visited = [$member => true];
         $endpoints = [];
         $frontiers = [];
         $stopped = false;
 
         while ($queue !== []) {
-            [$current, $trail, $depth] = array_shift($queue);
+            [$current, $trail, $depth, $site] = array_shift($queue);
 
             foreach ($this->consumerEdges($current) as $edge) {
                 $from = $edge['from'];
@@ -174,9 +185,11 @@ final readonly class Reach
                 }
 
                 $visited[$from] = true;
+                // Where the edited member itself is consumed: the first hop's site.
+                $at = $site ?? (string) $edge['at'];
 
                 if (str_ends_with($from, '.blade.php')) {
-                    $endpoints[] = ['node' => $from, 'kind' => 'template', 'trail' => $trail, 'coverage' => $this->templateCoverage($from)];
+                    $endpoints[] = ['node' => $from, 'kind' => 'template', 'trail' => $trail, 'at' => $at, 'coverage' => $this->templateCoverage($from)];
 
                     continue;
                 }
@@ -190,7 +203,7 @@ final readonly class Reach
                 $kind = $class === $own ? null : $this->endpointKind($class, Str::after($from, '::'));
 
                 if ($kind !== null) {
-                    $endpoints[] = ['node' => $from, 'kind' => $kind, 'trail' => $trail, 'coverage' => $this->fileCoverage(Str::beforeLast((string) $edge['at'], ':'))];
+                    $endpoints[] = ['node' => $from, 'kind' => $kind, 'trail' => $trail, 'at' => $at, 'coverage' => $this->fileCoverage(Str::beforeLast((string) $edge['at'], ':'))];
 
                     continue;
                 }
@@ -212,7 +225,7 @@ final readonly class Reach
                 }
 
                 $visited[$next] = true;
-                $queue[] = [$next, [...$trail, $from, ...($next === $from ? [] : [$next])], $depth + 1];
+                $queue[] = [$next, [...$trail, $from, ...($next === $from ? [] : [$next])], $depth + 1, $at];
             }
         }
 
@@ -287,28 +300,30 @@ final readonly class Reach
         }
 
         return match (true) {
-            str_contains($class, '\\Jobs\\') => 'job, heuristic',
-            str_contains($class, '\\Mail\\') => 'mailable, heuristic',
-            str_contains($class, '\\Notifications\\') => 'notification, heuristic',
-            str_contains($class, '\\Mcp\\') => 'MCP tool, heuristic',
+            str_contains($class, '\\Jobs\\') => 'job, by namespace',
+            str_contains($class, '\\Mail\\') => 'mailable, by namespace',
+            str_contains($class, '\\Notifications\\') => 'notification, by namespace',
+            str_contains($class, '\\Mcp\\') => 'MCP tool, by namespace',
             default => null,
         };
     }
 
     /**
-     * @param  array{node: string, kind: string, trail: list<string>, coverage: string}  $endpoint
+     * @param  array{node: string, kind: string, trail: list<string>, at: string, coverage: string}  $endpoint
      */
     private function endpointLine(array $endpoint): string
     {
-        $trail = implode(' -> ', array_map($this->short(...), [...$endpoint['trail'], ...($endpoint['kind'] === 'template' ? [] : [$endpoint['node']])]));
+        // The constructor bridge reads as what it is: the class being made, not a call to __construct.
+        $hops = array_map(
+            fn (string $hop) => str_ends_with($hop, '::__construct') ? 'new '.class_basename(Str::before($hop, '::')) : $this->short($hop),
+            [...$endpoint['trail'], $endpoint['node']],
+        );
 
-        $what = match (true) {
-            $endpoint['kind'] === 'template' => $endpoint['node'],
-            str_starts_with($endpoint['kind'], 'route ') => $endpoint['kind'].' ('.$this->short($endpoint['node']).')',
-            default => Str::before($endpoint['node'], '::').' ('.$endpoint['kind'].')',
-        };
+        $what = str_starts_with($endpoint['kind'], 'route ')
+            ? $endpoint['kind'].' ('.$this->short($endpoint['node']).')'
+            : Str::before($endpoint['node'], '::').' ('.$endpoint['kind'].')';
 
-        return "reaches $what via $trail; {$endpoint['coverage']}";
+        return "reaches $what via ".implode(' -> ', $hops)." (at {$endpoint['at']}); {$endpoint['coverage']}";
     }
 
     /**
@@ -339,9 +354,20 @@ final readonly class Reach
         return max(1, (int) config('quine.reach.depth', 6));
     }
 
+    /**
+     * What renders the template: up to three test files by name, or nothing.
+     */
     private function templateCoverage(string $path): string
     {
-        return $this->tests($path) === [] ? 'no test renders this' : 'a test renders it (whether it exercises your change is yours to check)';
+        $tests = $this->tests($path);
+
+        if ($tests === []) {
+            return 'no test renders this';
+        }
+
+        $more = count($tests) - 3;
+
+        return implode(', ', array_slice($tests, 0, 3)).($more > 0 ? " +$more" : '').(count($tests) === 1 ? ' renders it' : ' render it');
     }
 
     private function fileCoverage(string $path): string

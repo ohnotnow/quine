@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use Illuminate\Support\Str;
 use Workbench\App\Http\Controllers\PostController;
 
 it('records the controller call site of a model method as a calls edge from the enclosing method', function () {
@@ -102,7 +101,7 @@ it('never records a framework member Larastan reports as declared on the model',
         ->and($graph->edgesTo('Workbench\App\Models\Post::factory'))->toBe([]);
 });
 
-it('never records a member outside the app namespace, and never a class consuming itself', function () {
+it('never records a member outside the app namespace, and never a member consuming itself', function () {
     $graph = updatedGraph();
     $symbols = array_filter($graph->edges, fn (array $edge) => in_array($edge['kind'], ['calls', 'fetches'], true));
 
@@ -110,8 +109,18 @@ it('never records a member outside the app namespace, and never a class consumin
 
     foreach ($symbols as $edge) {
         expect($edge['to'])->toStartWith('Workbench\App\\')
-            ->and(Str::beforeLast($edge['to'], '::'))->not->toBe($edge['from']);
+            ->and($edge['to'])->not->toBe($edge['from']);
     }
+});
+
+it('records a member reading another member of its own class, the hop a walk needs', function () {
+    expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::title'))->toContain([
+        'from' => 'Workbench\App\Models\Post::getTitleLabelAttribute',
+        'to' => 'Workbench\App\Models\Post::title',
+        'kind' => 'fetches',
+        'label' => 'fetches title',
+        'at' => 'workbench/app/Models/Post.php:72',
+    ]);
 });
 
 it('records what a template reads, on the blade line, through the view call that types it', function () {

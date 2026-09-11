@@ -6,7 +6,6 @@ namespace Ohffs\Quine\Sources;
 
 use Illuminate\Contracts\View\Factory;
 use Illuminate\Filesystem\Filesystem;
-use Illuminate\Support\Str;
 use Illuminate\View\FileViewFinder;
 use Ohffs\Quine\Graph;
 use Ohffs\Quine\Project;
@@ -73,7 +72,9 @@ final class SymbolsSource implements Source
                                 ? [$row[0], "{$row[0]}:{$row[4]}", $row[1], $row[2], $row[3]]
                                 : [$from === $path || $row[4] === null ? $from : "$from::{$row[4]}", "$path:{$row[3]}", $row[0], $row[1], $row[2]];
 
-                            if (Str::beforeLast($to, '::') === Str::before($node, '::')) {
+                            // A member consuming itself (recursion) says nothing; a member consuming
+                            // another member of its own class is a hop the walk needs.
+                            if ($to === $node) {
                                 continue;
                             }
 

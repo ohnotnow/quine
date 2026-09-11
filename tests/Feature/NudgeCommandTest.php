@@ -132,8 +132,8 @@ it('names the resolved consumers of a method the edit removed, with no heuristic
     expect(Artisan::output())->toBe(implode("\n", [
         'Quine: hang on. workbench/app/Models/Post.php',
         'Post::isPublished() removed; called from workbench/app/Http/Controllers/PostController.php:12, workbench/app/Support/PostDigest.php:14, workbench/app/Support/PostSummary.php:14, workbench/tests/Feature/PostPageTest.php:14',
-        'reaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show; no test covers workbench/app/Http/Controllers/PostController.php',
-        'reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show; no test covers workbench/app/Http/Controllers/PostSummaryController.php',
+        'reaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show (at workbench/app/Http/Controllers/PostController.php:12); no test covers workbench/app/Http/Controllers/PostController.php',
+        'reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show (at workbench/app/Support/PostSummary.php:14); no test covers workbench/app/Http/Controllers/PostSummaryController.php',
         'reached PostDigest::digest, nothing found that uses it',
         'tia cache is stale: 1 test files are not in it (CommentPageTest.php): re-run vendor/bin/pest --tia',
         '1 test file covers this file: PostPageTest.php (vendor/bin/pest --tia runs it)',
@@ -146,7 +146,7 @@ it('stops the walk at the configured depth and says so once', function () {
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    expect(Artisan::output())->toContain("\nreaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show; no test covers workbench/app/Http/Controllers/PostController.php\n")
+    expect(Artisan::output())->toContain("\nreaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show (at workbench/app/Http/Controllers/PostController.php:12); no test covers workbench/app/Http/Controllers/PostController.php\n")
         ->toContain("\nwalk stopped at depth 1 below Post::isPublished (quine.reach.depth)\n")
         ->not->toContain('PostSummaryController');
 });
@@ -218,7 +218,7 @@ it('walks from a method whose body the edit changed, through the header the edit
     $command->setLaravel(app());
     $command->run($input, $output);
 
-    expect($output->fetch())->toStartWith("Quine: hang on. workbench/app/Models/Post.php\nreaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show; no test covers workbench/app/Http/Controllers/PostController.php\n")
+    expect($output->fetch())->toStartWith("Quine: hang on. workbench/app/Models/Post.php\nreaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show (at workbench/app/Http/Controllers/PostController.php:12); no test covers workbench/app/Http/Controllers/PostController.php\n")
         ->toContain("\nreached PostDigest::digest, nothing found that uses it\n")
         ->not->toContain('isPublished() removed');
 });
@@ -393,7 +393,7 @@ it('reaches a template through a symbol edge to the changed member, not by the n
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
     // The walk reaches the template itself, with its trail and coverage, so the templates-reached note does not repeat it.
-    expect(Artisan::output())->toContain('reaches workbench/resources/views/posts/show.blade.php via Post::author; a test renders it (whether it exercises your change is yours to check)')
+    expect(Artisan::output())->toContain('reaches workbench/resources/views/posts/show.blade.php:3 (PostPageTest.php renders it) via Post::author; whether a test exercises your change is yours to check')
         ->not->toContain('templates reached: workbench/resources/views/posts/show.blade.php');
 
     // show.blade.php:3 reads $post->author->name: the word "name" is in its text, but the edge is
