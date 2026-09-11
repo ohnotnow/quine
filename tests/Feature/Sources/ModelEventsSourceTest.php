@@ -9,7 +9,7 @@ use Workbench\App\Observers\PostObserver;
 it('emits a model-event edge to the closure registered in booted()', function () {
     expect(updatedGraph()->edgesFrom(Post::class, 'model-event'))->toContain([
         'from' => Post::class,
-        'to' => 'closure workbench/app/Models/Post.php:27',
+        'to' => 'closure workbench/app/Models/Post.php:28',
         'kind' => 'model-event',
         'label' => 'created',
         'at' => null,

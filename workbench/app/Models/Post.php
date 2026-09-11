@@ -3,6 +3,7 @@
 namespace Workbench\App\Models;
 
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -64,5 +65,16 @@ class Post extends Model
     public function scopePublished(Builder $query): void
     {
         $query->whereNotNull('created_at');
+    }
+
+    public function getTitleLabelAttribute(): string
+    {
+        return strtoupper($this->title);
+    }
+
+    /** @return Attribute<string, never> */
+    protected function excerpt(): Attribute
+    {
+        return Attribute::get(fn () => substr($this->body, 0, 40));
     }
 }

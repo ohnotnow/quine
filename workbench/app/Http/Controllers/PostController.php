@@ -21,4 +21,9 @@ class PostController
     {
         return collect([$post])->map(fn (Post $each) => $each->nothing())->first() ?? '';
     }
+
+    public function teaser(Post $post): string
+    {
+        return $post->title_label.': '.$post->excerpt;
+    }
 }

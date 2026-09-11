@@ -31,7 +31,7 @@ it('records constructing an app class as a calls edge to its constructor', funct
         'to' => 'Workbench\App\Mail\PostAnnounced::__construct',
         'kind' => 'calls',
         'label' => 'new PostAnnounced(...)',
-        'at' => 'workbench/app/Models/Post.php:60',
+        'at' => 'workbench/app/Models/Post.php:61',
     ]);
 });
 
@@ -61,7 +61,7 @@ it('records dispatching an app event or job as a call to its own member', functi
         'to' => 'Workbench\App\Events\PostPublished::dispatch',
         'kind' => 'calls',
         'label' => 'calls static dispatch()',
-        'at' => 'workbench/app/Models/Post.php:27',
+        'at' => 'workbench/app/Models/Post.php:28',
     ]);
 });
 
