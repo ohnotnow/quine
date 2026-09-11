@@ -18,14 +18,16 @@ This is the first test release.  Treat it as 'it worked ok for the original deve
 composer require --dev ohffs/quine
 ```
 
-Requires PHP 8.3+, Laravel 12+, and your app's own larastan and Pest v5+. Larastan reads your migrations for nullability; Pest's `--tia` cache is what tells quine which tests reach which files. Build the graph when you feel there's enough churn.
+Requires PHP 8.3+ and Laravel 12+. Quine pulls in larastan, PHPStan and Pest v5 itself. If you also have [bladestan](https://github.com/bladestan/bladestan) installed, quine indexes what your Blade templates read too; without it `quine:update` says `templates: not indexed` and templates are in the graph only by name. At the time of writing bladestan 0.11 breaks a plain `vendor/bin/phpstan` run on PHPStan 2.2 ([bladestan#191](https://github.com/bladestan/bladestan/issues/191)). Build the graph when you feel there's enough churn.
+
+For Best Results(TM), give your relation methods the larastan generics (`/** @return BelongsTo<Author, $this> */`). Without them larastan types `$post->author` as a bare `Model`, and quine can only tell you "something over there reads a relation" rather than which one. If you would rather not do that by hand, there is a [Claude skill for working through it](https://github.com/ohnotnow/agentic-stuff/tree/master/skills/larastan).
 
 ```bash
 vendor/bin/pest --tia
 php artisan quine:update
 ```
 
-`quine:update` prints a summary of the models, hidden edges and pages, and ends with the nudges the recipes have for the whole app. On the package's own fixture app that ends like this:
+`quine:update` prints a summary of the models, hidden edges and pages, a line counting who calls and reads what (`symbols: 9 calls, 13 fetches from 18 files; templates: 2 indexed`), and ends with the nudges the recipes have for the whole app. On the package's own fixture app that ends like this:
 
 ```
   NUDGES ....................................... what to check before you edit
@@ -44,17 +46,23 @@ php artisan quine:ask Post
 
 ```
   NEIGHBOURHOOD .................................... Workbench\App\Models\Post
-    <- [relation: posts() HasMany] Workbench\App\Models\Author  workbench/app/Models/Author.php:22
-    <- [relation: post() BelongsTo] Workbench\App\Models\Comment  workbench/app/Models/Comment.php:29
-    -> [relation: author() BelongsTo] Workbench\App\Models\Author  workbench/app/Models/Post.php:30
-    -> [relation: comments() HasMany] Workbench\App\Models\Comment  workbench/app/Models/Post.php:35
-    -> [relation: tags() BelongsToMany] Workbench\App\Models\Tag  workbench/app/Models/Post.php:40
-    <- [relation: posts() BelongsToMany] Workbench\App\Models\Tag  workbench/app/Models/Tag.php:24
-    -> [model-event: created] closure workbench/app/Models/Post.php:22
+    <- [relation: posts() HasMany] Workbench\App\Models\Author  workbench/app/Models/Author.php:23
+    <- [relation: post() BelongsTo] Workbench\App\Models\Comment  workbench/app/Models/Comment.php:31
+    -> [relation: author() BelongsTo] Workbench\App\Models\Author  workbench/app/Models/Post.php:37
+    -> [relation: comments() HasMany] Workbench\App\Models\Comment  workbench/app/Models/Post.php:43
+    -> [relation: tags() BelongsToMany] Workbench\App\Models\Tag  workbench/app/Models/Post.php:49
+    <- [relation: posts() BelongsToMany] Workbench\App\Models\Tag  workbench/app/Models/Tag.php:25
+    -> [model-event: created] closure workbench/app/Models/Post.php:23
     -> [model-event: saving] Workbench\App\Observers\PostObserver@saving
     -> [policy: policy] Workbench\App\Policies\PostPolicy
-    <- referenced by 4 classes (uses; --full lists them)
-    -> references 1 class (uses; --full lists them)
+    <- author fetched from 3 places (quine:ask Post::author for them)
+    <- isPublished() called from 2 places (quine:ask Post::isPublished for them)
+    <- title fetched from 2 places (quine:ask Post::title for them)
+    <- announcement() called from 1 place (quine:ask Post::announcement for them)
+    <- referenced by 6 classes (uses; --full lists them)
+    -> references 2 classes (uses; --full lists them)
+    via Workbench\App\Console\Commands\AnnouncePosts:
+        <- [schedule: 0 * * * *] schedule
     via Workbench\App\Http\Controllers\PostController:
         <- [route: show web] route GET|HEAD /posts/{post} [posts.show]
         -> [renders: posts.show] workbench/resources/views/posts/show.blade.php  workbench/app/Http/Controllers/PostController.php:12
@@ -67,11 +75,32 @@ php artisan quine:ask Post
     workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
 ```
 
-The surprising kinds come first; plain `use Blah` references are just given as a count, run with `--full` to see them. Note: for now the nudges only cover models one relation away.
+(Trimmed: a few of the "fetched from" lines and one `via` block are left out.) The surprising kinds come first; plain `use Blah` references are just given as a count, run with `--full` to see them. Note: for now the nudges only cover models one relation away.
+
+Ask about one member with `Class::member` (or `Class->member`, same thing) and it lists the consumers, templates included:
+
+```bash
+php artisan quine:ask 'Comment::author'
+```
+
+```
+  CONSUMERS ............................. Workbench\App\Models\Comment::author
+    <- [fetches: fetches author] workbench/resources/views/posts/comments.blade.php  workbench/resources/views/posts/comments.blade.php:4
+    <- [fetches: fetches author] workbench/resources/views/posts/comments.blade.php  workbench/resources/views/posts/comments.blade.php:5
+```
 
 ## Nudge on an edit
 
-`quine:nudge <file>` says what an edit to one file can reach: the observers, listeners and policies registered somewhere else, the templates the change can arrive at and whether any test renders them, how many tests cover the file, and whatever the quine graph has to say about the uncommitted diff. It prints nothing for a file the graph does not know. Touch the fixture's Post model and it says:
+`quine:nudge <file>` says what an edit to one file can reach. It prints nothing for a file the graph does not know. Delete `author()` from the fixture's Comment model and it says:
+
+```
+Quine: hang on. workbench/app/Models/Comment.php
+Comment::author() removed; called from workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5
+reaches workbench/resources/views/posts/comments.blade.php: no test renders this
+no test covers this file
+```
+
+Touch the fixture's Post model somewhere near its observer, policy and event and it says:
 
 ```
 Quine: hang on. workbench/app/Models/Post.php
@@ -95,7 +124,7 @@ workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comm
 
 ## Claude Code hook
 
-The package ships a PostToolUse hook for Claude Code. After every Write or Edit inside a Laravel app that has quine installed, it runs `quine:nudge` on the edited file and if there's something to note, hands that back to the agent as additional context opening with `Quine: hang on.` when there is a gap or a hidden edge, or `Quine: fyi.` when there is not
+The package ships a PostToolUse hook for Claude Code. After every Write or Edit inside a Laravel app that has quine installed, it runs `quine:nudge` on the edited file and if there's something to note, hands that back to the agent as additional context.
 
 Add this to `~/.claude/settings.json`, or to `.claude/settings.local.json` in one app to keep it local:
 

@@ -11,3 +11,7 @@ composer.lock
 .vscode
 .ait/
 .ant/
+/CLAUDE_WEB.md
+/FINDINGS.md
+/SESSION*.md
+/HANDOVER*
