@@ -13,7 +13,9 @@ declare(strict_types=1);
  * to say, and it never fails an edit.
  *
  * Standalone on purpose: no Laravel bootstrap, no Composer autoload. The app's
- * own artisan does the real work.
+ * own artisan does the real work. The edit itself (the text replaced and the
+ * text written) goes to quine on stdin, so the nudge is about this edit and
+ * not about everything uncommitted in the file.
  */
 final class QuineHook
 {
@@ -31,7 +33,7 @@ final class QuineHook
      * The JSON to print for Claude Code, or null to stay silent.
      *
      * @param  array<string, mixed>  $input
-     * @param  callable(list<string>, string, int): string  $exec  Runs a command in a directory with a timeout, returning stdout.
+     * @param  callable(list<string>, string, int, ?string): string  $exec  Runs a command in a directory with a timeout and optional stdin, returning stdout.
      */
     public static function run(array $input, callable $exec): ?string
     {
@@ -49,7 +51,9 @@ final class QuineHook
                 return null;
             }
 
-            $nudges = trim($exec(['php', 'artisan', 'quine:nudge', $file], $root, 20));
+            $edit = self::edit($toolInput);
+            $command = ['php', 'artisan', 'quine:nudge', $file, ...($edit === null ? [] : ['--edit'])];
+            $nudges = trim($exec($command, $root, 20, $edit));
 
             if ($nudges === '') {
                 return null;
@@ -67,17 +71,43 @@ final class QuineHook
     }
 
     /**
+     * The edit as JSON for quine:nudge --edit: what an Edit replaced and
+     * wrote, or what a Write wrote with nothing replaced. Null when the tool
+     * input carries neither, and quine falls back to git.
+     *
+     * @param  array<string, mixed>  $toolInput
+     */
+    private static function edit(array $toolInput): ?string
+    {
+        if (isset($toolInput['old_string'], $toolInput['new_string']) && is_string($toolInput['old_string']) && is_string($toolInput['new_string'])) {
+            return json_encode(['old' => $toolInput['old_string'], 'new' => $toolInput['new_string']], JSON_THROW_ON_ERROR);
+        }
+
+        if (isset($toolInput['content']) && is_string($toolInput['content'])) {
+            return json_encode(['old' => null, 'new' => $toolInput['content']], JSON_THROW_ON_ERROR);
+        }
+
+        return null;
+    }
+
+    /**
      * Run a command without a shell, giving up after the timeout.
      *
      * @param  list<string>  $command
      */
-    public static function exec(array $command, string $cwd, int $timeoutSeconds): string
+    public static function exec(array $command, string $cwd, int $timeoutSeconds, ?string $stdin = null): string
     {
-        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $cwd);
+        $process = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $cwd);
 
         if (! is_resource($process)) {
             return '';
         }
+
+        if ($stdin !== null) {
+            fwrite($pipes[0], $stdin);
+        }
+
+        fclose($pipes[0]);
 
         stream_set_blocking($pipes[1], false);
         stream_set_blocking($pipes[2], false);

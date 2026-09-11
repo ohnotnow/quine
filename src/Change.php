@@ -72,6 +72,100 @@ final readonly class Change
     }
 
     /**
+     * Whether any changed line is code rather than a comment or blank. A
+     * docblock edit changes nothing anyone else can see.
+     */
+    public function touchesCode(): bool
+    {
+        foreach ([...$this->addedLines(), ...$this->linesMarked('-')] as $line) {
+            $trimmed = trim($line);
+
+            if ($trimmed !== '' && preg_match('~^(//|#|/\*|\*)~', $trimmed) !== 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Whether a changed line mentions the word: a class basename, a method
+     * name, an event name. Word-bounded, so "author" is not "authors".
+     */
+    public function mentions(string $word): bool
+    {
+        $pattern = '/\b'.preg_quote($word, '/').'\b/';
+
+        foreach ([...$this->addedLines(), ...$this->linesMarked('-')] as $line) {
+            if (preg_match($pattern, $line) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Every method the diff declares on an added line.
+     *
+     * @return list<string>
+     */
+    public function addedMethods(): array
+    {
+        return array_keys($this->declarations($this->addedLines()));
+    }
+
+    /**
+     * Methods whose declaration the diff removes without declaring again:
+     * deleted, or renamed, either way their callers are about to break.
+     *
+     * @return list<string>
+     */
+    public function removedMethods(): array
+    {
+        $before = $this->declarations($this->linesMarked('-'));
+        $after = $this->declarations($this->addedLines());
+
+        return array_values(array_filter(array_keys($before), fn (string $name) => ! array_key_exists($name, $after)));
+    }
+
+    /**
+     * Methods declared on both a removed and an added line, differently: a
+     * parameter, type or visibility changed under whoever calls it.
+     *
+     * @return list<string>
+     */
+    public function changedMethods(): array
+    {
+        $before = $this->declarations($this->linesMarked('-'));
+        $after = $this->declarations($this->addedLines());
+
+        return array_values(array_filter(
+            array_keys($before),
+            fn (string $name) => array_key_exists($name, $after) && $after[$name] !== $before[$name],
+        ));
+    }
+
+    /**
+     * Method name to its trimmed declaration line, for every declaration in the lines.
+     *
+     * @param  list<string>  $lines
+     * @return array<string, string>
+     */
+    private function declarations(array $lines): array
+    {
+        $found = [];
+
+        foreach ($lines as $line) {
+            if (preg_match('/^\s*(?:(?:abstract|final|public|protected|private|static)\s+)*function\s+(\w+)\s*\(/', $line, $match) === 1) {
+                $found[$match[1]] = trim($line);
+            }
+        }
+
+        return $found;
+    }
+
+    /**
      * @return list<string>
      */
     private function linesMarked(string $sign): array

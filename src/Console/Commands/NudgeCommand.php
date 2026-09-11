@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace Ohffs\Quine\Console\Commands;
 
 use Illuminate\Console\Command;
+use InvalidArgumentException;
 use Ohffs\Quine\Change;
 use Ohffs\Quine\Differ;
+use Ohffs\Quine\EditDiffer;
 use Ohffs\Quine\Fingerprint;
 use Ohffs\Quine\Graph;
 use Ohffs\Quine\GraphBuilder;
 use Ohffs\Quine\Project;
 use Ohffs\Quine\Reach;
 use Ohffs\Quine\Recipes\Registry;
+use Symfony\Component\Console\Input\StreamableInputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Throwable;
 
@@ -25,7 +28,8 @@ class NudgeCommand extends Command
     /**
      * The command signature.
      */
-    protected $signature = 'quine:nudge {file : Absolute or relative path of the edited file}';
+    protected $signature = 'quine:nudge {file : Absolute or relative path of the edited file}
+                                        {--edit : Read the edit from stdin as JSON {"old": string|null, "new": string} instead of diffing against git}';
 
     /**
      * The command description.
@@ -42,17 +46,18 @@ class NudgeCommand extends Command
             }
 
             $graph = $this->freshGraph($builder, $project);
-            ['gaps' => $gaps, 'hidden' => $hidden, 'notes' => $notes] = (new Reach($graph, $project))->digest($path);
-            $nudges = array_map('strval', $recipes->nudges(Change::forFile($path, $differ->diff($path)), $graph));
+            $change = Change::forFile($path, ($this->editFromStdin($project) ?? $differ)->diff($path));
+            ['callers' => $callers, 'gaps' => $gaps, 'hidden' => $hidden, 'notes' => $notes] = (new Reach($graph, $project))->digest($change);
+            $nudges = array_map('strval', $recipes->nudges($change, $graph));
 
-            if ($gaps === [] && $hidden === [] && $notes === [] && $nudges === []) {
+            if ($callers === [] && $gaps === [] && $hidden === [] && $notes === [] && $nudges === []) {
                 return self::SUCCESS;
             }
 
-            // "hang on" is earned by a gap, a hidden edge or a recipe; the rest is for the record.
-            $this->line(($gaps !== [] || $hidden !== [] || $nudges !== [] ? 'Quine: hang on. ' : 'Quine: fyi. ').$path);
+            // "hang on" is earned by a broken caller, a gap, a hidden edge or a recipe; the rest is for the record.
+            $this->line(($callers !== [] || $gaps !== [] || $hidden !== [] || $nudges !== [] ? 'Quine: hang on. ' : 'Quine: fyi. ').$path);
 
-            foreach ([...$gaps, ...$hidden, ...$notes, ...$nudges] as $line) {
+            foreach ([...$callers, ...$gaps, ...$hidden, ...$notes, ...$nudges] as $line) {
                 $this->line($line);
             }
         } catch (Throwable $e) {
@@ -61,6 +66,25 @@ class NudgeCommand extends Command
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * With --edit, the differ built from the JSON edit on stdin; without it, null.
+     */
+    private function editFromStdin(Project $project): ?Differ
+    {
+        if (! $this->option('edit')) {
+            return null;
+        }
+
+        $stream = $this->input instanceof StreamableInputInterface ? $this->input->getStream() : null;
+        $edit = json_decode((string) stream_get_contents($stream ?? STDIN), true, flags: JSON_THROW_ON_ERROR);
+
+        if (! is_array($edit) || ! is_string($edit['new'] ?? null) || ! (is_string($edit['old'] ?? null) || ($edit['old'] ?? null) === null)) {
+            throw new InvalidArgumentException('--edit expects JSON {"old": string|null, "new": string} on stdin');
+        }
+
+        return new EditDiffer($project, $edit['old'] ?? null, $edit['new']);
     }
 
     /**

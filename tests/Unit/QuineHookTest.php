@@ -14,11 +14,21 @@ beforeEach(function () {
     $this->edited = $this->root.'/database/migrations/2026_01_01_000000_create_things_table.php';
     File::put($this->edited, '<?php');
     $this->calls = [];
-    $this->exec = function (array $command, string $cwd, int $timeoutSeconds) {
-        $this->calls[] = [$command, $cwd, $timeoutSeconds];
+    $this->exec = function (array $command, string $cwd, int $timeoutSeconds, ?string $stdin = null) {
+        $this->calls[] = [$command, $cwd, $timeoutSeconds, $stdin];
 
         return "some nudge\n";
     };
+});
+
+it('hands the edit itself to quine:nudge on stdin', function () {
+    QuineHook::run(['tool_input' => ['file_path' => $this->edited, 'old_string' => "a\n", 'new_string' => "b\n"]], $this->exec);
+    QuineHook::run(['tool_input' => ['file_path' => $this->edited, 'content' => "<?php\n"]], $this->exec);
+
+    expect($this->calls)->toBe([
+        [['php', 'artisan', 'quine:nudge', $this->edited, '--edit'], $this->root, 20, '{"old":"a\\n","new":"b\\n"}'],
+        [['php', 'artisan', 'quine:nudge', $this->edited, '--edit'], $this->root, 20, '{"old":null,"new":"<?php\\n"}'],
+    ]);
 });
 
 it('injects the nudge as additional context when quine has something to say', function () {
@@ -30,7 +40,7 @@ it('injects the nudge as additional context when quine has something to say', fu
 
     expect($decoded['hookSpecificOutput']['hookEventName'])->toBe('PostToolUse')
         ->and($decoded['hookSpecificOutput']['additionalContext'])->toBe('some nudge')
-        ->and($this->calls)->toBe([[['php', 'artisan', 'quine:nudge', $this->edited], $this->root, 20]]);
+        ->and($this->calls)->toBe([[['php', 'artisan', 'quine:nudge', $this->edited], $this->root, 20, null]]);
 });
 
 it('stays silent when quine prints nothing', function () {
