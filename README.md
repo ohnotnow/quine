@@ -27,7 +27,7 @@ vendor/bin/pest --tia
 php artisan quine:update
 ```
 
-`quine:update` prints a summary of the models, hidden edges and pages, a line counting who calls and reads what (`symbols: 15 calls, 30 fetches from 23 files; templates: 2 indexed`), and ends with the nudges the recipes have for the whole app. On the package's own fixture app that ends like this:
+`quine:update` prints a summary of the models, hidden edges and pages, a line counting who calls and reads what (`symbols: 15 calls, 31 fetches from 23 files; templates: 2 indexed`), and ends with the nudges the recipes have for the whole app. On the package's own fixture app that ends like this:
 
 ```
   NUDGES ....................................... what to check before you edit
@@ -35,6 +35,7 @@ php artisan quine:update
   workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)
   workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)
   workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
+  workbench/app/Support/PostCache.php:28  builds a storage path from Comment->author, which can be null
 ```
 
 ## Ask about something
@@ -106,6 +107,14 @@ workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Co
 workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)
 workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)
 workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
+workbench/app/Support/PostCache.php:28  builds a storage path from Comment->author, which was removed
+```
+
+Make the fixture's `title` column nullable and it says:
+
+```
+Quine: hang on. workbench/database/migrations/0001_01_01_000002_create_posts_table.php
+workbench/app/Support/PostCache.php:19  builds a cache key from Post->title, which can now be null
 ```
 
 Touch the fixture's Post model somewhere near its observer, policy and event and it says:
@@ -162,7 +171,7 @@ One copy serves every project: copy `hooks/claude-code/post-edit.php` somewhere 
 php artisan vendor:publish --tag="quine-config"
 ```
 
-The published file sets the paths quine scans, where the graph is written, where the Pest tia cache lives, and the list of recipes. The only recipe so far is the nullable belongsTo one. A recipe is a class implementing `Ohffs\Quine\Recipes\Recipe`.
+The published file sets the paths quine scans, where the graph is written, where the Pest tia cache lives, and the list of recipes. There are two recipes so far: the nullable belongsTo one, and one that speaks when a column or accessor feeding a cache key, a storage path, a URL, a config key or a queue name is made nullable, retyped, recast or removed. A recipe is a class implementing `Ohffs\Quine\Recipes\Recipe`.
 
 ## What it is not
 

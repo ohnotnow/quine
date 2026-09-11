@@ -79,7 +79,7 @@ it('prints how many member consumers the symbol index holds', function () {
     $this->withTemplates();
 
     $this->artisan('quine:update')
-        ->expectsOutputToContain('symbols: 15 calls, 30 fetches from 23 files; templates: 2 indexed')
+        ->expectsOutputToContain('symbols: 15 calls, 31 fetches from 23 files; templates: 2 indexed')
         ->assertSuccessful();
 });
 

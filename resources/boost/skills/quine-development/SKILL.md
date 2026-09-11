@@ -40,7 +40,7 @@ php artisan quine:ask 'Post::author'    # consumers of one member; 'Post->author
 
 - read the NEIGHBOURHOOD block top to bottom: surprising kinds (relations, model events, policies, listeners, routes, rendered templates) come first, plain references are a count
 - the `fetched from` / `called from` lines say which members are consumed and by how many places; ask for the member to see each site with its file and line
-- NUDGES lists what the recipes want checked: a nullable foreign key, a template reading it without null-safety, whether any factory, seeder or test creates the null case
+- NUDGES lists what the recipes want checked: a nullable foreign key, a template reading it without null-safety, whether any factory, seeder or test creates the null case, and a nullable column or relation that feeds a cache key, storage path, URL, config key or queue name
 
 ### 3. Nudge after an edit
 
@@ -48,7 +48,7 @@ php artisan quine:ask 'Post::author'    # consumers of one member; 'Post->author
 php artisan quine:nudge app/Models/Post.php
 ```
 
-- prints `Quine: hang on.` when the edit reaches a gap or a hidden edge (a removed or changed method with callers, a template no test renders, an observer or listener outside the file, a recipe finding), `Quine: fyi.` when it only reaches tested things, and nothing when the graph does not know the file
+- prints `Quine: hang on.` when the edit reaches a gap or a hidden edge (a removed or changed method with callers, somewhere the walk from an edited method ends up such as a route, template, listener, job or MCP tool, a template no test renders, an observer or listener outside the file, a recipe finding), `Quine: fyi.` when it only reaches tested things, and nothing when the graph does not know the file
 - the callers line names every resolved consumer of a removed or changed method, templates on their own line; treat it as the checklist
 - `--edit` reads `{"old": ..., "new": ...}` from stdin to judge one edit rather than the working-tree diff; the hook uses it
 
@@ -83,7 +83,7 @@ Add to `~/.claude/settings.json` or the app's `.claude/settings.local.json`:
 php artisan vendor:publish --tag="quine-config"
 ```
 
-Keys in `config/quine.php`: `base_path`, `graph_path`, `namespace` (default `App\`), `paths.app`, `paths.migrations`, `paths.views` (null means `config('view.paths')`), `paths.tests`, `paths.fixtures` (factories and seeders), `tia_graph` (null means discover Pest's cache), `recipes`.
+Keys in `config/quine.php`: `base_path`, `graph_path`, `namespace` (default `App\`), `paths.app`, `paths.migrations`, `paths.views` (null means `config('view.paths')`), `paths.tests`, `paths.fixtures` (factories and seeders), `tia_graph` (null means discover Pest's cache), `reach.depth` (how many member hops the nudge walks, default 6), `recipes`.
 
 ### 6. Add a recipe when a kind of change keeps biting
 

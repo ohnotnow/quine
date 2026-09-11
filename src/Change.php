@@ -52,6 +52,16 @@ final readonly class Change
     }
 
     /**
+     * The lines the diff removes, without their leading minus sign.
+     *
+     * @return list<string>
+     */
+    public function removedLines(): array
+    {
+        return $this->linesMarked('-');
+    }
+
+    /**
      * Every line inside the diff's hunks, changed or context, without its
      * leading sign. A change is judged by what it sits beside: an edit in the
      * body of a relation method has that method's declaration within the

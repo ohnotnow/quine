@@ -248,7 +248,7 @@ it('names the consumers of a removed scope or accessor under the name they consu
     app()->instance(Differ::class, new FakeDiffer("-    public function getTitleLabelAttribute(): string\n"));
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    expect(Artisan::output())->toContain("\nPost::getTitleLabelAttribute() removed; called from workbench/app/Http/Controllers/PostController.php:27\n");
+    expect(Artisan::output())->toContain("\nPost::getTitleLabelAttribute() removed; called from workbench/app/Http/Controllers/PostController.php:27, workbench/app/Support/PostCache.php:19\n");
 
     app()->instance(Differ::class, new FakeDiffer("-    protected function excerpt(): Attribute\n"));
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);

@@ -16,7 +16,7 @@ class PostCache
     public function title(Post $post): string
     {
         return Cache::remember(
-            "post:{$post->id}:{$post->title}",
+            "post:{$post->id}:{$post->title}:{$post->title_label}",
             60,
             fn () => $post->title,
         );

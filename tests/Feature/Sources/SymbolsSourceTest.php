@@ -189,5 +189,5 @@ it('labels a fetch inside a storage path, keeping the null guard in the same bra
 
     expect($fromTheCache('Workbench\App\Models\Author::id'))->toBe(['workbench/app/Support/PostCache.php:28' => 'fetches id (unguarded, storage path)'])
         ->and($fromTheCache('Workbench\App\Models\Comment::body'))->toBe(['workbench/app/Support/PostCache.php:29' => 'fetches body'])
-        ->and($graph->meta['symbols']['sinks'])->toBe(5);
+        ->and($graph->meta['symbols']['sinks'])->toBe(6);
 });

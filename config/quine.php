@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Ohffs\Quine\Recipes\KeyedMember;
 use Ohffs\Quine\Recipes\NullableBelongsTo;
 
 return [
@@ -29,6 +30,7 @@ return [
 
     'recipes' => [
         NullableBelongsTo::class,
+        KeyedMember::class,
     ],
 
 ];
