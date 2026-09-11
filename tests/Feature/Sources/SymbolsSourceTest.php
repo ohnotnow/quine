@@ -163,3 +163,13 @@ it('reaches a template through the view call that renders it, and records nothin
         'at' => 'workbench/resources/views/posts/show.blade.php:2',
     ])->and(array_filter($graph->edgesFrom('workbench/resources/views/posts/show.blade.php'), fn (array $edge) => in_array($edge['kind'], ['calls', 'fetches'], true) && str_contains($edge['to'], 'Gate')))->toBe([]);
 });
+
+it('records a resource collection call as the app\'s own member, the way it records dispatch', function () {
+    expect(updatedGraph()->edgesTo('Workbench\App\Http\Resources\PostResource::collection'))->toContain([
+        'from' => 'Workbench\App\Http\Controllers\PostSummaryController::index',
+        'to' => 'Workbench\App\Http\Resources\PostResource::collection',
+        'kind' => 'calls',
+        'label' => 'calls static collection()',
+        'at' => 'workbench/app/Http/Controllers/PostSummaryController.php:19',
+    ]);
+});

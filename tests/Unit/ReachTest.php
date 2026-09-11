@@ -74,7 +74,7 @@ it('treats every method of a page-routed class, a Livewire full-page component, 
 
     expect($walk['endpoints'])->toHaveCount(1)
         ->and($walk['endpoints'][0]['node'])->toBe('Workbench\App\Livewire\Admin\Users::toggleAdmin')
-        ->and($walk['endpoints'][0]['kind'])->toBe('route GET|HEAD /admin/users')
+        ->and($walk['endpoints'][0]['kind'])->toBe('page GET|HEAD /admin/users')
         ->and($walk['frontiers'])->toBe([]);
 });
 
@@ -121,5 +121,45 @@ it('collapses the templates one trail reaches to a line naming what renders each
 
     expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\User::full_name')['lines'])->toBe([
         'reaches workbench/resources/views/a.blade.php:4 (ATest.php, AlsoTest.php render it), workbench/resources/views/b.blade.php:9 (no test renders this) via User::full_name; whether a test exercises your change is yours to check',
+    ]);
+});
+
+it('prints the routes one trail reaches on one line, naming their actions', function () {
+    $graph = new Graph;
+    $graph->meta['coverage'] = 'ok';
+    $graph->edge('Workbench\App\Http\Resources\NoteResource::toArray', 'Workbench\App\Models\User::full_name', 'fetches', 'fetches full_name', 'workbench/app/Http/Resources/NoteResource.php:23');
+
+    foreach (['store' => 'POST /api/notes', 'show' => 'GET|HEAD /api/notes/{note}', 'update' => 'PUT|PATCH /api/notes/{note}'] as $action => $route) {
+        $graph->edge("Workbench\\App\\Http\\Controllers\\NoteController::$action", 'Workbench\App\Http\Resources\NoteResource::__construct', 'calls', 'new NoteResource(...)', 'workbench/app/Http/Controllers/NoteController.php:30');
+        $graph->edge("route $route [notes.$action]", 'Workbench\App\Http\Controllers\NoteController', 'route', "$action api", null);
+    }
+
+    expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\User::full_name')['lines'])->toBe([
+        'reaches routes POST /api/notes, GET|HEAD /api/notes/{note}, PUT|PATCH /api/notes/{note} (NoteController::store, show, update) via User::full_name -> NoteResource::toArray -> new NoteResource (at workbench/app/Http/Resources/NoteResource.php:23); no test covers workbench/app/Http/Controllers/NoteController.php',
+    ]);
+});
+
+it('labels an MCP server as a server and a page route by its component and action', function () {
+    $graph = new Graph;
+    $graph->meta['coverage'] = 'ok';
+    $graph->edge('Workbench\App\Mcp\Servers\Main::instructionsFor', 'Workbench\App\Models\Note::inChannelsOf', 'calls', 'calls inChannelsOf()', 'workbench/app/Mcp/Servers/Main.php:51');
+    $graph->edge('Workbench\App\Livewire\Admin\Users::toggleAdmin', 'Workbench\App\Models\Note::inChannelsOf', 'calls', 'calls inChannelsOf()', 'workbench/app/Livewire/Admin/Users.php:207');
+    $graph->edge('route GET|HEAD /admin/users [admin.users]', 'Workbench\App\Livewire\Admin\Users', 'route', 'page web', null);
+
+    expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\Note::inChannelsOf')['lines'])->toBe([
+        'reaches Workbench\App\Mcp\Servers\Main (MCP server, by namespace) via Note::inChannelsOf -> Main::instructionsFor (at workbench/app/Mcp/Servers/Main.php:51); no test covers workbench/app/Mcp/Servers/Main.php',
+        'reaches route GET|HEAD /admin/users (Users component, toggleAdmin) via Note::inChannelsOf -> Users::toggleAdmin (at workbench/app/Livewire/Admin/Users.php:207); no test covers workbench/app/Livewire/Admin/Users.php',
+    ]);
+});
+
+it('follows a resource through collection() as well as its constructor', function () {
+    $graph = new Graph;
+    $graph->meta['coverage'] = 'ok';
+    $graph->edge('Workbench\App\Http\Resources\PostResource::toArray', 'Workbench\App\Models\Post::title', 'fetches', 'fetches title', 'workbench/app/Http/Resources/PostResource.php:17');
+    $graph->edge('Workbench\App\Http\Controllers\PostController::index', 'Workbench\App\Http\Resources\PostResource::collection', 'calls', 'calls static collection()', 'workbench/app/Http/Controllers/PostController.php:33');
+    $graph->edge('route GET|HEAD /posts [posts.index]', 'Workbench\App\Http\Controllers\PostController', 'route', 'index web', null);
+
+    expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\Post::title')['lines'])->toBe([
+        'reaches route GET|HEAD /posts (PostController::index) via Post::title -> PostResource::toArray -> PostResource::collection -> PostController::index (at workbench/app/Http/Resources/PostResource.php:17); no test covers workbench/app/Http/Controllers/PostController.php',
     ]);
 });

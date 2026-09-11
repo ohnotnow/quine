@@ -80,7 +80,7 @@ it('collapses uses edges to a count by default, but still walks through them', f
     Artisan::call('quine:ask', ['node' => Post::class]);
     $output = Artisan::output();
 
-    expect($output)->toContain('<- referenced by 9 classes (uses; --full lists them)')
+    expect($output)->toContain('<- referenced by 10 classes (uses; --full lists them)')
         ->and($output)->toContain('-> references 2 classes (uses; --full lists them)')
         ->and($output)->not->toContain('PostController.php:6')
         ->and($output)->toContain('    via '.PostPublished::class.":\n        -> [event: queued listener] ".NotifyEditors::class.'@handle')

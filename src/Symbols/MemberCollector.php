@@ -27,10 +27,12 @@ use PHPStan\Type\TypeCombinator;
 final class MemberCollector implements Collector
 {
     /**
-     * The static methods Illuminate's Dispatchable traits give an app event or
-     * job: declared in vendor, but the coupling they express is the app's.
+     * Framework statics that are the way in to an app class: the Dispatchable
+     * traits' dispatch family on an event or job, JsonResource's collection
+     * and make on a resource. Declared in vendor, but the coupling they
+     * express is the app's.
      */
-    private const array DISPATCHES = ['dispatch', 'dispatchIf', 'dispatchUnless', 'dispatchSync', 'dispatchNow', 'dispatchAfterResponse', 'broadcast'];
+    private const array ENTRIES = ['dispatch', 'dispatchIf', 'dispatchUnless', 'dispatchSync', 'dispatchNow', 'dispatchAfterResponse', 'broadcast', 'collection', 'make'];
 
     public function __construct(
         private readonly string $namespace,
@@ -114,8 +116,8 @@ final class MemberCollector implements Collector
                 }
             }
 
-            // Dispatching an app event or job is the app's own doing, however the trait spells it.
-            if (in_array($method, self::DISPATCHES, true) && str_starts_with($class->getName(), $this->namespace)) {
+            // Dispatching an app event or job, or collecting an app resource, is the app's own doing.
+            if (in_array($method, self::ENTRIES, true) && str_starts_with($class->getName(), $this->namespace)) {
                 return $class->getName();
             }
         }

@@ -119,11 +119,17 @@ final readonly class Reach
         $walk = $this->walk($member);
         $lines = [];
         $templates = [];
-        $more = $cap === null ? 0 : count($walk['endpoints']) - $cap;
-
         $byTrail = [];
+        $routes = [];
 
-        foreach (array_slice($walk['endpoints'], 0, $cap) as $endpoint) {
+        foreach ($walk['endpoints'] as $endpoint) {
+            // The routed actions one trail reaches on one class share a line.
+            if (str_starts_with($endpoint['kind'], 'route ')) {
+                $routes[implode(' -> ', $endpoint['trail']).' '.Str::before($endpoint['node'], '::')][] = $endpoint;
+
+                continue;
+            }
+
             if ($endpoint['kind'] !== 'template') {
                 $lines[] = $this->endpointLine($endpoint);
 
@@ -135,13 +141,19 @@ final readonly class Reach
             $byTrail[implode(' -> ', $endpoint['trail'])][] = $endpoint;
         }
 
+        foreach ($routes as $group) {
+            $lines[] = count($group) === 1 ? $this->endpointLine($group[0]) : $this->routesLine($group);
+        }
+
         foreach ($byTrail as $trail => $reached) {
             $named = array_map(fn (array $endpoint) => "{$endpoint['at']} (".$this->templateCoverage($endpoint['node']).')', $reached);
             $lines[] = 'reaches '.implode(', ', $named).' via '.implode(' -> ', array_map($this->short(...), explode(' -> ', $trail))).'; whether a test exercises your change is yours to check';
         }
 
-        if ($more > 0) {
-            $lines[] = "and $more more: quine:ask ".$this->short($member).' lists them';
+        // The cap is on printed lines, after routes and templates have shared theirs.
+        if ($cap !== null && count($lines) > $cap) {
+            $more = count($lines) - $cap;
+            $lines = [...array_slice($lines, 0, $cap), "and $more more: quine:ask ".$this->short($member).' lists them'];
         }
 
         foreach ($walk['frontiers'] as $frontier) {
@@ -209,10 +221,10 @@ final readonly class Reach
                 }
 
                 // A method nobody calls (a resource's toArray, a job's handle, a mailable's
-                // content) runs for whoever constructs or dispatches its class: walk on from there.
-                $next = $this->consumerEdges($from) === [] ? $this->entryOf($class, $visited) : $from;
+                // content) runs for whoever constructs, collects or dispatches its class: walk on from there.
+                $nexts = $this->consumerEdges($from) === [] ? $this->entriesOf($class, $visited) : [$from];
 
-                if ($next === null) {
+                if ($nexts === []) {
                     $frontiers[] = $from;
 
                     continue;
@@ -224,8 +236,10 @@ final readonly class Reach
                     continue;
                 }
 
-                $visited[$next] = true;
-                $queue[] = [$next, [...$trail, $from, ...($next === $from ? [] : [$next])], $depth + 1, $at];
+                foreach ($nexts as $next) {
+                    $visited[$next] = true;
+                    $queue[] = [$next, [...$trail, $from, ...($next === $from ? [] : [$next])], $depth + 1, $at];
+                }
             }
         }
 
@@ -233,13 +247,17 @@ final readonly class Reach
     }
 
     /**
-     * The constructor or dispatch member of the class that something consumes,
-     * or null: the way in to a class whose methods the framework calls.
+     * The constructor, collection or dispatch members of the class that
+     * something consumes: the ways in to a class whose methods the framework
+     * calls.
      *
      * @param  array<string, true>  $visited
+     * @return list<string>
      */
-    private function entryOf(string $class, array $visited): ?string
+    private function entriesOf(string $class, array $visited): array
     {
+        $entries = [];
+
         foreach ($this->graph->edges as $edge) {
             if (! in_array($edge['kind'], ['calls', 'fetches'], true) || ! str_starts_with($edge['to'], "$class::")) {
                 continue;
@@ -247,12 +265,12 @@ final readonly class Reach
 
             $member = Str::after($edge['to'], "$class::");
 
-            if (($member === '__construct' || str_starts_with($member, 'dispatch')) && ! isset($visited[$edge['to']])) {
-                return $edge['to'];
+            if ((in_array($member, ['__construct', 'collection', 'make'], true) || str_starts_with($member, 'dispatch')) && ! isset($visited[$edge['to']])) {
+                $entries[$edge['to']] = true;
             }
         }
 
-        return null;
+        return array_keys($entries);
     }
 
     /**
@@ -267,8 +285,10 @@ final readonly class Reach
         // A route to a class rather than an action ("page": a Livewire full-page component)
         // makes every public method of it an entry point.
         foreach ($routes as $edge) {
-            if (in_array(Str::before($edge['label'], ' '), [$method, 'page'], true)) {
-                return Str::beforeLast($edge['from'], ' [');
+            $action = Str::before($edge['label'], ' ');
+
+            if ($action === $method || $action === 'page') {
+                return ($action === 'page' ? 'page ' : 'route ').Str::after(Str::beforeLast($edge['from'], ' ['), 'route ');
             }
         }
 
@@ -303,6 +323,7 @@ final readonly class Reach
             str_contains($class, '\\Jobs\\') => 'job, by namespace',
             str_contains($class, '\\Mail\\') => 'mailable, by namespace',
             str_contains($class, '\\Notifications\\') => 'notification, by namespace',
+            str_contains($class, '\\Mcp\\Servers\\') => 'MCP server, by namespace',
             str_contains($class, '\\Mcp\\') => 'MCP tool, by namespace',
             default => null,
         };
@@ -319,11 +340,32 @@ final readonly class Reach
             [...$endpoint['trail'], $endpoint['node']],
         );
 
-        $what = str_starts_with($endpoint['kind'], 'route ')
-            ? $endpoint['kind'].' ('.$this->short($endpoint['node']).')'
-            : Str::before($endpoint['node'], '::').' ('.$endpoint['kind'].')';
+        $what = match (true) {
+            str_starts_with($endpoint['kind'], 'route ') => $endpoint['kind'].' ('.$this->short($endpoint['node']).')',
+            // A page route mounts the component; the method is a Livewire action on it, not what GET runs.
+            str_starts_with($endpoint['kind'], 'page ') => 'route '.Str::after($endpoint['kind'], 'page ').' ('.class_basename(Str::before($endpoint['node'], '::')).' component, '.Str::after($endpoint['node'], '::').')',
+            default => Str::before($endpoint['node'], '::').' ('.$endpoint['kind'].')',
+        };
 
         return "reaches $what via ".implode(' -> ', $hops)." (at {$endpoint['at']}); {$endpoint['coverage']}";
+    }
+
+    /**
+     * Several routed actions of one class, reached by one trail, as one line.
+     *
+     * @param  non-empty-list<array{node: string, kind: string, trail: list<string>, at: string, coverage: string}>  $group
+     */
+    private function routesLine(array $group): string
+    {
+        $first = $group[0];
+        $hops = array_map(
+            fn (string $hop) => str_ends_with($hop, '::__construct') ? 'new '.class_basename(Str::before($hop, '::')) : $this->short($hop),
+            $first['trail'],
+        );
+        $routes = implode(', ', array_map(fn (array $endpoint) => Str::after($endpoint['kind'], 'route '), $group));
+        $actions = implode(', ', array_map(fn (array $endpoint) => Str::after($endpoint['node'], '::'), $group));
+
+        return "reaches routes $routes (".class_basename(Str::before($first['node'], '::'))."::$actions) via ".implode(' -> ', $hops)." (at {$first['at']}); {$first['coverage']}";
     }
 
     /**
