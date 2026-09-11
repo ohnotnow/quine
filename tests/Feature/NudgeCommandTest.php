@@ -75,7 +75,7 @@ it('names the observer, policy or listener chain only when the edit touches it',
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    // Post's own booted() closure (Post.php:22) is in the file being edited, so it is not hidden and not printed.
+    // Post's own booted() closure (Post.php:26) is in the file being edited, so it is not hidden and not printed.
     expect(Artisan::output())->toBe(implode("\n", [
         'Quine: hang on. workbench/app/Models/Post.php',
         'dispatches Workbench\\App\\Events\\PostPublished -> Workbench\\App\\Listeners\\NotifyEditors@handle (queued listener)',

@@ -11,6 +11,7 @@ Everything so far, in one place, since nothing is tagged yet:
 - One recipe, `NullableBelongsTo`: a foreign key that can be null, the templates that dereference the relation without null-safety, and whether any factory, seeder or test ever creates the null case.
 - A Claude Code PostToolUse hook, `hooks/claude-code/post-edit.php`, that runs `quine:nudge` after every Write or Edit and hands the result back as additional context.
 - Scheduled artisan commands resolve to their command class, so `quine:ask` on a command shows it runs on a schedule.
+- The member index holds only members the app declares: `Note::factory()`, `Note::where()`, `withTrashed()` and the rest of Eloquent's magic are no longer recorded against the model, and a scope is recorded under the name it is called by whether called on the model or on a builder.
 - An edit that only adds or changes comments stays silent, even when the editor's anchor text repeats the line below the docblock: lines the old and new text share are context, not a change.
 
 ## [v0.1.0](https://github.com/ohnotnow/quine/compare/...v0.1.0) - 202x-xx-xx

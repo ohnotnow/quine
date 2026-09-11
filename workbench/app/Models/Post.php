@@ -2,6 +2,7 @@
 
 namespace Workbench\App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -9,12 +10,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Workbench\App\Events\PostPublished;
 use Workbench\App\Mail\PostAnnounced;
+use Workbench\App\Models\Concerns\Nothing;
 use Workbench\Database\Factories\PostFactory;
 
 class Post extends Model
 {
     /** @use HasFactory<PostFactory> */
     use HasFactory;
+
+    use Nothing;
 
     protected $fillable = ['author_id', 'title', 'body'];
 
@@ -54,5 +58,11 @@ class Post extends Model
     public function announcement(): PostAnnounced
     {
         return new PostAnnounced($this);
+    }
+
+    /** @param Builder<Post> $query */
+    public function scopePublished(Builder $query): void
+    {
+        $query->whereNotNull('created_at');
     }
 }

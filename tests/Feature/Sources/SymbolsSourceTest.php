@@ -31,17 +31,47 @@ it('records constructing an app class as a calls edge to its constructor', funct
         'to' => 'Workbench\App\Mail\PostAnnounced::__construct',
         'kind' => 'calls',
         'label' => 'new PostAnnounced(...)',
-        'at' => 'workbench/app/Models/Post.php:56',
+        'at' => 'workbench/app/Models/Post.php:60',
     ]);
 });
 
-it('records a static call against the class it is called on', function () {
-    expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::factory'))->toContain([
-        'from' => 'workbench/tests/Feature/PostPageTest.php',
-        'to' => 'Workbench\App\Models\Post::factory',
+it('records a static call to a scope against the model, under the name it is called by', function () {
+    expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::published'))->toContain([
+        'from' => PostController::class,
+        'to' => 'Workbench\App\Models\Post::published',
         'kind' => 'calls',
-        'label' => 'calls static factory()',
-        'at' => 'workbench/tests/Feature/PostPageTest.php:14',
+        'label' => 'calls static published()',
+        'at' => 'workbench/app/Http/Controllers/PostController.php:17',
+    ]);
+});
+
+it('records a scope called on the builder against its model', function () {
+    expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::published'))->toContain([
+        'from' => PostController::class,
+        'to' => 'Workbench\App\Models\Post::published',
+        'kind' => 'calls',
+        'label' => 'calls published()',
+        'at' => 'workbench/app/Http/Controllers/PostController.php:17',
+    ]);
+});
+
+it('records dispatching an app event or job as a call to its own member', function () {
+    expect(updatedGraph()->edgesTo('Workbench\App\Events\PostPublished::dispatch'))->toContain([
+        'from' => 'Workbench\App\Models\Post',
+        'to' => 'Workbench\App\Events\PostPublished::dispatch',
+        'kind' => 'calls',
+        'label' => 'calls static dispatch()',
+        'at' => 'workbench/app/Models/Post.php:27',
+    ]);
+});
+
+it('records a method an app trait declares against the class using it', function () {
+    expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::nothing'))->toContain([
+        'from' => PostController::class,
+        'to' => 'Workbench\App\Models\Post::nothing',
+        'kind' => 'calls',
+        'label' => 'calls nothing()',
+        'at' => 'workbench/app/Http/Controllers/PostController.php:22',
     ]);
 });
 
@@ -62,6 +92,14 @@ it('records a property fetch, naming the guard only when the receiver can be nul
         'workbench/tests/Feature/PostPageTest.php:20' => 'fetches name (null-safe)',
         'workbench/tests/Feature/PostPageTest.php:21' => 'fetches name (unguarded)',
     ]);
+});
+
+it('never records a framework member Larastan reports as declared on the model', function () {
+    $graph = updatedGraph();
+
+    expect($graph->edgesTo('Workbench\App\Models\Post::where'))->toBe([])
+        ->and($graph->edgesTo('Workbench\App\Models\Post::count'))->toBe([])
+        ->and($graph->edgesTo('Workbench\App\Models\Post::factory'))->toBe([]);
 });
 
 it('never records a member outside the app namespace, and never a class consuming itself', function () {

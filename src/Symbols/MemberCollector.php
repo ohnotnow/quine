@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Ohffs\Quine\Symbols;
 
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Support\Str;
 use PhpParser\Node;
 use PhpParser\Node\Expr;
@@ -11,6 +12,7 @@ use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
 use PHPStan\Analyser\Scope;
 use PHPStan\Collectors\Collector;
+use PHPStan\Reflection\ClassReflection;
 use PHPStan\Type\Type;
 use PHPStan\Type\TypeCombinator;
 
@@ -23,7 +25,16 @@ use PHPStan\Type\TypeCombinator;
  */
 final class MemberCollector implements Collector
 {
-    public function __construct(private readonly string $namespace) {}
+    /**
+     * The static methods Illuminate's Dispatchable traits give an app event or
+     * job: declared in vendor, but the coupling they express is the app's.
+     */
+    private const array DISPATCHES = ['dispatch', 'dispatchIf', 'dispatchUnless', 'dispatchSync', 'dispatchNow', 'dispatchAfterResponse', 'broadcast'];
+
+    public function __construct(
+        private readonly string $namespace,
+        private readonly string $appPath,
+    ) {}
 
     public function getNodeType(): string
     {
@@ -61,7 +72,9 @@ final class MemberCollector implements Collector
         }
 
         if ($node instanceof Expr\StaticCall && $node->class instanceof Name && $node->name instanceof Identifier) {
-            return $this->row($scope->resolveName($node->class), $node->name->toString(), 'calls', "calls static {$node->name->toString()}()", $node);
+            $class = $this->declaringClassOfMethod($scope->resolveTypeByName($node->class), $node->name->toString(), $scope);
+
+            return $this->row($class, $node->name->toString(), 'calls', "calls static {$node->name->toString()}()", $node);
         }
 
         if ($node instanceof Expr\New_ && $node->class instanceof Name) {
@@ -73,13 +86,51 @@ final class MemberCollector implements Collector
         return null;
     }
 
+    /**
+     * The class whose file declares the method, or null when the app does not
+     * declare it. Larastan reports Eloquent's magic (factory, where, withTrashed)
+     * as declared on the model and a scope as declared on the builder, so the
+     * candidates are the declaring class, the receiver's class and, on a
+     * builder, its model; the test is the native method's file, scope form
+     * included.
+     */
     private function declaringClassOfMethod(Type $type, string $method, Scope $scope): ?string
     {
         if (! $type->hasMethod($method)->yes()) {
             return null;
         }
 
-        return $type->getMethod($method, $scope)->getDeclaringClass()->getName();
+        $candidates = [
+            $type->getMethod($method, $scope)->getDeclaringClass(),
+            ...$type->getObjectClassReflections(),
+            ...$type->getTemplateType(EloquentBuilder::class, 'TModel')->getObjectClassReflections(),
+        ];
+
+        foreach ($candidates as $class) {
+            foreach ([$method, 'scope'.ucfirst($method)] as $name) {
+                if ($this->declaredInApp($class, $name)) {
+                    return $class->getName();
+                }
+            }
+
+            // Dispatching an app event or job is the app's own doing, however the trait spells it.
+            if (in_array($method, self::DISPATCHES, true) && str_starts_with($class->getName(), $this->namespace)) {
+                return $class->getName();
+            }
+        }
+
+        return null;
+    }
+
+    private function declaredInApp(ClassReflection $class, string $method): bool
+    {
+        if (! $class->hasNativeMethod($method)) {
+            return false;
+        }
+
+        $file = $class->getNativeReflection()->getMethod($method)->getFileName();
+
+        return is_string($file) && str_starts_with($file, rtrim($this->appPath, '/').'/');
     }
 
     private function declaringClassOfProperty(Type $type, string $property, Scope $scope): ?string

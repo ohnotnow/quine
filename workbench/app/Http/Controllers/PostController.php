@@ -11,4 +11,14 @@ class PostController
     {
         return view('posts.show', ['post' => $post, 'published' => $post->isPublished(), 'title' => $post->title]);
     }
+
+    public function published(): int
+    {
+        return Post::published()->count() + Post::where('title', '!=', '')->published()->count();
+    }
+
+    public function nothing(Post $post): string
+    {
+        return $post->nothing();
+    }
 }

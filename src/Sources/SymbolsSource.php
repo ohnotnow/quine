@@ -48,7 +48,7 @@ final class SymbolsSource implements Source
         $bladestan = $this->bladestan->installed();
         $container = PhpStan::container($project, [$project->appPath, $project->testsPath], $bladestan ? $this->bladestan->configFiles() : [], ['databaseMigrationsPath' => [$project->migrationsPath]]);
         $analyser = PhpStan::analyser($container, $all);
-        $members = new MemberCollector($project->namespace);
+        $members = new MemberCollector($project->namespace, $project->appPath);
         $templates = $bladestan ? new TemplateCollector($this->bladestan, $container, $analyser, $members, $project, $this->viewRoots($project)) : null;
         $rules = new Rules([]); // @phpstan-ignore phpstanApi.constructor
         $collectors = new Collectors($templates === null ? [$members] : [$members, $templates]); // @phpstan-ignore phpstanApi.constructor

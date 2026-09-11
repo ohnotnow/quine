@@ -7,5 +7,8 @@ namespace Workbench\App\Models\Concerns;
  */
 trait Nothing
 {
-    //
+    public function nothing(): string
+    {
+        return '';
+    }
 }
