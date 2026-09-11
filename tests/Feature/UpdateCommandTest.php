@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
+use Ohffs\Quine\Graph;
 use Workbench\App\Events\PostPublished;
 use Workbench\App\Listeners\NotifyEditors;
 
@@ -33,7 +34,7 @@ it('ends with a human summary of models and nudges', function () {
         ->expectsOutputToContain('MODELS')
         ->expectsOutputToContain('author(): BelongsTo -> Author  NULLABLE comments.author_id')
         ->expectsOutputToContain('tags(): BelongsToMany -> Tag  via post_tag')
-        ->expectsOutputToContain('on created -> closure workbench/app/Models/Post.php:22')
+        ->expectsOutputToContain('on created -> closure workbench/app/Models/Post.php:23')
         ->expectsOutputToContain('accessors: excerpt')
         ->expectsOutputToContain('casts: id=int')
         ->expectsOutputToContain('NUDGES')
@@ -72,4 +73,24 @@ it('says the tia cache is fresh when every test on disk is in it', function () {
     $this->artisan('quine:update')
         ->expectsOutputToContain('tia cache is fresh: 1 test files')
         ->assertSuccessful();
+});
+
+it('prints how many member consumers the symbol index holds', function () {
+    $this->withTemplates();
+
+    $this->artisan('quine:update')
+        ->expectsOutputToContain('symbols: 9 calls, 13 fetches from 18 files; templates: 2 indexed')
+        ->assertSuccessful();
+});
+
+it('still indexes PHP members and says so when bladestan is not installed', function () {
+    // The TestCase already binds a not-installed Bladestan; this test is the one that relies on it.
+    $this->artisan('quine:update')
+        ->expectsOutputToContain('templates: not indexed (tomasvotruba/bladestan is not installed)')
+        ->assertSuccessful();
+
+    $graph = Graph::load(config()->string('quine.graph_path'));
+
+    expect($graph->edgesTo('Workbench\App\Models\Post::isPublished'))->not->toBeEmpty()
+        ->and($graph->edgesFrom('workbench/resources/views/posts/show.blade.php', 'fetches'))->toBe([]);
 });

@@ -20,7 +20,9 @@ use Ohffs\Quine\Sources\RendersSource;
 use Ohffs\Quine\Sources\RoutesSource;
 use Ohffs\Quine\Sources\ScheduleSource;
 use Ohffs\Quine\Sources\SchemaSource;
+use Ohffs\Quine\Sources\SymbolsSource;
 use Ohffs\Quine\Sources\UsesSource;
+use Ohffs\Quine\Support\Bladestan;
 
 class QuineServiceProvider extends ServiceProvider
 {
@@ -36,6 +38,7 @@ class QuineServiceProvider extends ServiceProvider
         $this->app->bind(Registry::class, fn (Application $app) => Registry::fromConfig($app));
 
         $this->app->bind(Differ::class, GitDiffer::class);
+        $this->app->singleton(Bladestan::class);
 
         $this->app->bind(GraphBuilder::class, fn (Application $app) => new GraphBuilder(
             $app->make(Project::class),
@@ -49,6 +52,7 @@ class QuineServiceProvider extends ServiceProvider
                 $app->make(RoutesSource::class),
                 $app->make(RendersSource::class),
                 $app->make(UsesSource::class),
+                $app->make(SymbolsSource::class),
                 $app->make(BladeSource::class),
                 $app->make(CoverageSource::class),
             ],

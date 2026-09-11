@@ -6,6 +6,7 @@ namespace Ohffs\Quine\Tests;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
+use Ohffs\Quine\Support\Bladestan;
 use Orchestra\Testbench\Concerns\WithWorkbench;
 use Orchestra\Testbench\TestCase as Orchestra;
 
@@ -29,6 +30,28 @@ abstract class TestCase extends Orchestra
         $app['config']->set('quine.paths.fixtures', [workbench_path('database/factories')]);
         $app['config']->set('quine.graph_path', sys_get_temp_dir().'/quine-test-'.uniqid().'/graph.json');
         $app['config']->set('quine.tia_graph', __DIR__.'/fixtures/tia-graph.json');
+    }
+
+    /**
+     * Compiling and analysing templates roughly triples a graph build, and
+     * most tests never look at a template edge. Tests that do call this.
+     */
+    protected function withTemplates(): void
+    {
+        $this->app->instance(Bladestan::class, new Bladestan);
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->app->instance(Bladestan::class, new class extends Bladestan
+        {
+            public function installed(): bool
+            {
+                return false;
+            }
+        });
     }
 
     protected function tearDown(): void

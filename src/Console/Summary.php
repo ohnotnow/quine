@@ -108,6 +108,31 @@ final class Summary
                 }
             }
         }
+
+        $this->symbols();
+    }
+
+    /**
+     * How much of the member-level index the graph holds, from what SymbolsSource counted.
+     */
+    private function symbols(): void
+    {
+        $symbols = $this->graph->meta['symbols'] ?? null;
+
+        if (! is_array($symbols)) {
+            return;
+        }
+
+        $line = sprintf('  symbols: %d calls, %d fetches from %d files', $symbols['calls'] ?? 0, $symbols['fetches'] ?? 0, $symbols['files'] ?? 0);
+
+        if (($symbols['bladestan'] ?? false) === true) {
+            $line .= sprintf('; templates: %d indexed', $symbols['templates'] ?? 0);
+            $line .= ($symbols['templates_failed'] ?? 0) > 0 ? sprintf(', %d failed to compile', $symbols['templates_failed']) : '';
+        } else {
+            $line .= '; templates: not indexed (tomasvotruba/bladestan is not installed)';
+        }
+
+        $this->command->line($line);
     }
 
     public function nudges(Registry $recipes): void
