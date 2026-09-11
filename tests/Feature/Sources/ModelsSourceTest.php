@@ -39,7 +39,7 @@ it('emits a relation edge with the file and line of the relation method', functi
         'to' => Author::class,
         'kind' => 'relation',
         'label' => 'author() BelongsTo',
-        'at' => 'workbench/app/Models/Comment.php:24',
+        'at' => 'workbench/app/Models/Comment.php:25',
     ]);
 });
 

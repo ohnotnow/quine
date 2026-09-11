@@ -9,6 +9,6 @@ class PostController
 {
     public function show(Post $post): View
     {
-        return view('posts.show', ['post' => $post]);
+        return view('posts.show', ['post' => $post, 'published' => $post->isPublished(), 'title' => $post->title]);
     }
 }
