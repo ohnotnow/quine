@@ -10,6 +10,7 @@ use PhpParser\Node;
 use PhpParser\Node\Expr;
 use PhpParser\Node\Identifier;
 use PhpParser\Node\Name;
+use PhpParser\NodeFinder;
 use PHPStan\Analyser\Scope;
 use PHPStan\Collectors\Collector;
 use PHPStan\Reflection\ClassReflection;
@@ -22,7 +23,7 @@ use PHPStan\Type\TypeCombinator;
  * method, who reads which property. Larastan has already resolved the
  * Eloquent magic by the time a node reaches here.
  *
- * @implements Collector<Expr, array{string, string, string, int, ?string}>
+ * @implements Collector<Expr, array{string, string, string, int, ?string, int}>
  */
 final class MemberCollector implements Collector
 {
@@ -33,6 +34,34 @@ final class MemberCollector implements Collector
      * express is the app's.
      */
     private const array ENTRIES = ['dispatch', 'dispatchIf', 'dispatchUnless', 'dispatchSync', 'dispatchNow', 'dispatchAfterResponse', 'broadcast', 'collection', 'make'];
+
+    /**
+     * Framework calls whose first argument is a key, a path, a URL or a name
+     * built by the app, by facade or helper name (a heuristic: the facade
+     * resolves to a framework class). Method name null means any method.
+     *
+     * @var array<string, array{methods: ?list<string>, label: string}>
+     */
+    private const array SINKS = [
+        'Cache' => ['methods' => ['get', 'put', 'remember', 'rememberForever', 'forget', 'has', 'add', 'increment', 'decrement', 'tags', 'pull', 'forever', 'missing'], 'label' => 'cache key'],
+        'cache' => ['methods' => null, 'label' => 'cache key'],
+        'Redis' => ['methods' => null, 'label' => 'redis key'],
+        'Storage' => ['methods' => ['put', 'get', 'exists', 'missing', 'delete', 'url', 'path', 'download', 'append', 'prepend', 'copy', 'move', 'size', 'lastModified', 'temporaryUrl', 'readStream', 'writeStream'], 'label' => 'storage path'],
+        'Http' => ['methods' => ['get', 'post', 'put', 'patch', 'delete', 'head'], 'label' => 'url'],
+        'config' => ['methods' => null, 'label' => 'config key'],
+        'Config' => ['methods' => ['get', 'has', 'string', 'integer', 'boolean', 'array'], 'label' => 'config key'],
+        'onQueue' => ['methods' => null, 'label' => 'queue'],
+        'onConnection' => ['methods' => null, 'label' => 'queue'],
+    ];
+
+    /**
+     * File, then start position, of every fetch or call sitting inside a sink's
+     * key argument, with the sink's label. Filled when the sink call is met,
+     * read when the nodes inside it are.
+     *
+     * @var array<string, array<int, string>>
+     */
+    private array $sinks = [];
 
     public function __construct(
         private readonly string $namespace,
@@ -45,7 +74,7 @@ final class MemberCollector implements Collector
     }
 
     /**
-     * @return array{string, string, string, int, ?string}|null [to, kind, label, line, enclosing method]
+     * @return array{string, string, string, int, ?string, int}|null [to, kind, label, line, enclosing method, file position]
      */
     public function processNode(Node $node, Scope $scope): ?array
     {
@@ -54,6 +83,8 @@ final class MemberCollector implements Collector
         if ($node->getAttribute('virtualNullsafePropertyFetch') === true || $node->getAttribute('virtualNullsafeMethodCall') === true) {
             return null;
         }
+
+        $this->markSink($node, $scope);
 
         if (($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall) && $node->name instanceof Identifier) {
             $class = $this->declaringClassOfMethod(TypeCombinator::removeNull($scope->getType($node->var)), $node->name->toString(), $scope);
@@ -146,7 +177,7 @@ final class MemberCollector implements Collector
     }
 
     /**
-     * @return array{string, string, string, int, ?string}|null
+     * @return array{string, string, string, int, ?string, int}|null
      */
     private function row(?string $class, string $member, string $kind, string $label, Node $node, Scope $scope): ?array
     {
@@ -154,7 +185,69 @@ final class MemberCollector implements Collector
             return null;
         }
 
-        return ["$class::$member", $kind, $label, $node->getStartLine(), $this->enclosingMethod($scope)];
+        return ["$class::$member", $kind, $label, $node->getStartLine(), $this->enclosingMethod($scope), $node->getStartFilePos()];
+    }
+
+    /**
+     * The sink whose key argument holds the node at this position in the
+     * file, or null. Asked after the file has been collected: PHPStan hands
+     * the expressions inside an argument to the collector BEFORE the call
+     * around them, so a row cannot carry its sink when it is made.
+     */
+    public function sinkAt(string $file, int $position): ?string
+    {
+        return $this->sinks[$file][$position] ?? null;
+    }
+
+    /**
+     * When the node is a sink call, remember every fetch and call inside its
+     * key argument so their rows can be told what they feed.
+     */
+    private function markSink(Node $node, Scope $scope): void
+    {
+        $label = $this->sinkLabel($node);
+
+        if ($label === null || ! $node instanceof Expr\CallLike || $node->isFirstClassCallable() || $node->getArgs() === []) {
+            return;
+        }
+
+        foreach ((new NodeFinder)->findInstanceOf($node->getArgs()[0]->value, Expr::class) as $inner) {
+            $this->sinks[$scope->getFile()][$inner->getStartFilePos()] = $label;
+        }
+    }
+
+    /**
+     * The sink label for a Facade::method(), helper(), Storage::disk()->method()
+     * or ->onQueue() call, or null.
+     */
+    private function sinkLabel(Node $node): ?string
+    {
+        [$facade, $method] = match (true) {
+            $node instanceof Expr\StaticCall && $node->class instanceof Name && $node->name instanceof Identifier => [$node->class->getLast(), $node->name->toString()],
+            $node instanceof Expr\FuncCall && $node->name instanceof Name => [$node->name->getLast(), null],
+            $node instanceof Expr\MethodCall && $node->name instanceof Identifier => [$this->facadeBehind($node->var) ?? $node->name->toString(), $node->name->toString()],
+            default => [null, null],
+        };
+
+        $sink = self::SINKS[$facade] ?? null;
+
+        if ($sink === null) {
+            return null;
+        }
+
+        return $sink['methods'] === null || in_array($method, $sink['methods'], true) ? $sink['label'] : null;
+    }
+
+    /**
+     * The facade a chain such as Storage::disk('x')->put() hangs off, or null.
+     */
+    private function facadeBehind(Expr $receiver): ?string
+    {
+        while ($receiver instanceof Expr\MethodCall) {
+            $receiver = $receiver->var;
+        }
+
+        return $receiver instanceof Expr\StaticCall && $receiver->class instanceof Name ? $receiver->class->getLast() : null;
     }
 
     /**

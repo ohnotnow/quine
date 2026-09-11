@@ -14,6 +14,7 @@ it('nudges about the migration line, the unguarded read and the fixture gap for 
     expect(array_map('strval', $nudges))->toBe([
         "workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null: \$table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();",
         'workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)',
+        'workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)',
         'workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path',
     ]);
 });
@@ -41,7 +42,7 @@ it('drops the fixture-gap nudge once a fixture produces the null state', functio
 
     $reasons = array_map(fn (Nudge $nudge) => $nudge->reason, app(NullableBelongsTo::class)->nudges(Change::forNode(Comment::class), updatedGraph()));
 
-    expect($reasons)->toHaveCount(2)
+    expect($reasons)->toHaveCount(3)
         ->and(implode("\n", $reasons))->toContain('can be null:')->toContain('without null-safety')->not->toContain('no factory, seeder or test');
 });
 

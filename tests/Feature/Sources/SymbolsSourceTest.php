@@ -170,6 +170,24 @@ it('records a resource collection call as the app\'s own member, the way it reco
         'to' => 'Workbench\App\Http\Resources\PostResource::collection',
         'kind' => 'calls',
         'label' => 'calls static collection()',
-        'at' => 'workbench/app/Http/Controllers/PostSummaryController.php:19',
+        'at' => 'workbench/app/Http/Controllers/PostSummaryController.php:20',
     ]);
+});
+
+it('labels a fetch inside a cache key with the sink it feeds, and not the same fetch elsewhere', function () {
+    $fromTheCache = array_filter(updatedGraph()->edgesTo('Workbench\App\Models\Post::title'), fn (array $edge) => str_starts_with((string) $edge['at'], 'workbench/app/Support/PostCache.php'));
+
+    expect(array_column($fromTheCache, 'label', 'at'))->toBe([
+        'workbench/app/Support/PostCache.php:19' => 'fetches title (cache key)',
+        'workbench/app/Support/PostCache.php:21' => 'fetches title',
+    ]);
+});
+
+it('labels a fetch inside a storage path, keeping the null guard in the same bracket', function () {
+    $graph = updatedGraph();
+    $fromTheCache = fn (string $member) => array_column(array_filter($graph->edgesTo($member), fn (array $edge) => str_starts_with((string) $edge['at'], 'workbench/app/Support/PostCache.php')), 'label', 'at');
+
+    expect($fromTheCache('Workbench\App\Models\Author::id'))->toBe(['workbench/app/Support/PostCache.php:28' => 'fetches id (unguarded, storage path)'])
+        ->and($fromTheCache('Workbench\App\Models\Comment::body'))->toBe(['workbench/app/Support/PostCache.php:29' => 'fetches body'])
+        ->and($graph->meta['symbols']['sinks'])->toBe(5);
 });

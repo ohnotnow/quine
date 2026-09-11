@@ -53,7 +53,7 @@ final class SymbolsSource implements Source
         $collectors = new Collectors($templates === null ? [$members] : [$members, $templates]); // @phpstan-ignore phpstanApi.constructor
         $analysed = array_fill_keys($all, true);
 
-        $counts = ['calls' => 0, 'fetches' => 0];
+        $counts = ['calls' => 0, 'fetches' => 0, 'sinks' => 0];
         $seen = [];
 
         foreach ($files as $absolute => ['from' => $from, 'path' => $path]) {
@@ -76,6 +76,14 @@ final class SymbolsSource implements Source
                             // another member of its own class is a hop the walk needs.
                             if ($to === $node) {
                                 continue;
+                            }
+
+                            // A read that builds a cache key, a storage path, a URL: the sink joins the label's bracket.
+                            $sink = $fromTemplate ? null : $members->sinkAt($absolute, $row[5]);
+
+                            if ($sink !== null) {
+                                $label = str_ends_with($label, ')') ? substr($label, 0, -1).", $sink)" : "$label ($sink)";
+                                $counts['sinks']++;
                             }
 
                             $graph->edge($node, $to, $kind, $label, $at);

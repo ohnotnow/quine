@@ -27,12 +27,13 @@ vendor/bin/pest --tia
 php artisan quine:update
 ```
 
-`quine:update` prints a summary of the models, hidden edges and pages, a line counting who calls and reads what (`symbols: 9 calls, 13 fetches from 18 files; templates: 2 indexed`), and ends with the nudges the recipes have for the whole app. On the package's own fixture app that ends like this:
+`quine:update` prints a summary of the models, hidden edges and pages, a line counting who calls and reads what (`symbols: 15 calls, 30 fetches from 23 files; templates: 2 indexed`), and ends with the nudges the recipes have for the whole app. On the package's own fixture app that ends like this:
 
 ```
   NUDGES ....................................... what to check before you edit
   workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null: $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
   workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)
+  workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)
   workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
 ```
 
@@ -89,15 +90,22 @@ php artisan quine:ask 'Comment::author'
     <- [fetches: fetches author] workbench/resources/views/posts/comments.blade.php  workbench/resources/views/posts/comments.blade.php:5
 ```
 
+A read that builds a cache key, a storage path, a URL, a config key or a queue name says so in its label (`fetches title (cache key)`); the sinks are matched by facade and helper name, so that bit is a heuristic.
+
 ## Nudge on an edit
 
 `quine:nudge <file>` says what an edit to one file can reach. It prints nothing for a file the graph does not know. Delete `author()` from the fixture's Comment model and it says:
 
 ```
 Quine: hang on. workbench/app/Models/Comment.php
-Comment::author() removed; called from workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5
-reaches workbench/resources/views/posts/comments.blade.php via Comment::author; no test renders this
+Comment::author() removed; called from workbench/app/Support/PostCache.php:28, workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5
+reaches workbench/resources/views/posts/comments.blade.php:4 (no test renders this) via Comment::author; whether a test exercises your change is yours to check
+reached PostSummaryController::cached, nothing found that uses it
 no test covers this file
+workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null: $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
+workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)
+workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)
+workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
 ```
 
 Touch the fixture's Post model somewhere near its observer, policy and event and it says:

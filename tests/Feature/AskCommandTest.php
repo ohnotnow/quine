@@ -80,7 +80,7 @@ it('collapses uses edges to a count by default, but still walks through them', f
     Artisan::call('quine:ask', ['node' => Post::class]);
     $output = Artisan::output();
 
-    expect($output)->toContain('<- referenced by 10 classes (uses; --full lists them)')
+    expect($output)->toContain('<- referenced by 11 classes (uses; --full lists them)')
         ->and($output)->toContain('-> references 2 classes (uses; --full lists them)')
         ->and($output)->not->toContain('PostController.php:6')
         ->and($output)->toContain('    via '.PostPublished::class.":\n        -> [event: queued listener] ".NotifyEditors::class.'@handle')
@@ -123,6 +123,14 @@ it('prints the consumers of one member when asked for Class::member', function (
         ->and($output)->toContain('    reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show (at workbench/app/Support/PostSummary.php:14); no test covers workbench/app/Http/Controllers/PostSummaryController.php')
         ->and($output)->toContain('    reached PostDigest::digest, nothing found that uses it')
         ->and($output)->not->toContain('NEIGHBOURHOOD');
+});
+
+it('shows the sink a fetched member feeds in the consumer line', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    Artisan::call('quine:ask', ['node' => 'Post::title']);
+
+    expect(Artisan::output())->toContain('<- [fetches: fetches title (cache key)] Workbench\App\Support\PostCache::title  workbench/app/Support/PostCache.php:19');
 });
 
 it('accepts the arrow form for a property and lists the template that reads it', function () {
