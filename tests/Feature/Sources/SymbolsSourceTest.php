@@ -5,9 +5,9 @@ declare(strict_types=1);
 use Illuminate\Support\Str;
 use Workbench\App\Http\Controllers\PostController;
 
-it('records the controller call site of a model method as a calls edge', function () {
+it('records the controller call site of a model method as a calls edge from the enclosing method', function () {
     expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::isPublished'))->toContain([
-        'from' => PostController::class,
+        'from' => PostController::class.'::show',
         'to' => 'Workbench\App\Models\Post::isPublished',
         'kind' => 'calls',
         'label' => 'calls isPublished()',
@@ -27,7 +27,7 @@ it('records a call site in a test file under the test path as a node', function 
 
 it('records constructing an app class as a calls edge to its constructor', function () {
     expect(updatedGraph()->edgesTo('Workbench\App\Mail\PostAnnounced::__construct'))->toContain([
-        'from' => 'Workbench\App\Models\Post',
+        'from' => 'Workbench\App\Models\Post::announcement',
         'to' => 'Workbench\App\Mail\PostAnnounced::__construct',
         'kind' => 'calls',
         'label' => 'new PostAnnounced(...)',
@@ -37,7 +37,7 @@ it('records constructing an app class as a calls edge to its constructor', funct
 
 it('records a static call to a scope against the model, under the name it is called by', function () {
     expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::published'))->toContain([
-        'from' => PostController::class,
+        'from' => PostController::class.'::published',
         'to' => 'Workbench\App\Models\Post::published',
         'kind' => 'calls',
         'label' => 'calls static published()',
@@ -47,7 +47,7 @@ it('records a static call to a scope against the model, under the name it is cal
 
 it('records a scope called on the builder against its model', function () {
     expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::published'))->toContain([
-        'from' => PostController::class,
+        'from' => PostController::class.'::published',
         'to' => 'Workbench\App\Models\Post::published',
         'kind' => 'calls',
         'label' => 'calls published()',
@@ -57,7 +57,7 @@ it('records a scope called on the builder against its model', function () {
 
 it('records dispatching an app event or job as a call to its own member', function () {
     expect(updatedGraph()->edgesTo('Workbench\App\Events\PostPublished::dispatch'))->toContain([
-        'from' => 'Workbench\App\Models\Post',
+        'from' => 'Workbench\App\Models\Post::booted',
         'to' => 'Workbench\App\Events\PostPublished::dispatch',
         'kind' => 'calls',
         'label' => 'calls static dispatch()',
@@ -65,9 +65,9 @@ it('records dispatching an app event or job as a call to its own member', functi
     ]);
 });
 
-it('records a method an app trait declares against the class using it', function () {
+it('records a method an app trait declares against the class using it, from the method around the closure', function () {
     expect(updatedGraph()->edgesTo('Workbench\App\Models\Post::nothing'))->toContain([
-        'from' => PostController::class,
+        'from' => PostController::class.'::nothing',
         'to' => 'Workbench\App\Models\Post::nothing',
         'kind' => 'calls',
         'label' => 'calls nothing()',
@@ -79,7 +79,7 @@ it('records a property fetch, naming the guard only when the receiver can be nul
     $graph = updatedGraph();
 
     expect($graph->edgesTo('Workbench\App\Models\Post::title'))->toContain([
-        'from' => PostController::class,
+        'from' => PostController::class.'::show',
         'to' => 'Workbench\App\Models\Post::title',
         'kind' => 'fetches',
         'label' => 'fetches title',

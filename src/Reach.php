@@ -88,7 +88,7 @@ final readonly class Reach
         }
 
         foreach ($this->graph->edges as $edge) {
-            if ($edge['from'] === $node || $edge['to'] === $node) {
+            if ($edge['from'] === $node || $edge['to'] === $node || str_starts_with($edge['from'], "$node::")) {
                 return true;
             }
         }

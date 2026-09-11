@@ -19,6 +19,6 @@ class PostController
 
     public function nothing(Post $post): string
     {
-        return $post->nothing();
+        return collect([$post])->map(fn (Post $each) => $each->nothing())->first() ?? '';
     }
 }

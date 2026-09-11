@@ -13,6 +13,7 @@ use PhpParser\Node\Name;
 use PHPStan\Analyser\Scope;
 use PHPStan\Collectors\Collector;
 use PHPStan\Reflection\ClassReflection;
+use PHPStan\Reflection\MethodReflection;
 use PHPStan\Type\Type;
 use PHPStan\Type\TypeCombinator;
 
@@ -21,7 +22,7 @@ use PHPStan\Type\TypeCombinator;
  * method, who reads which property. Larastan has already resolved the
  * Eloquent magic by the time a node reaches here.
  *
- * @implements Collector<Expr, array{string, string, string, int}>
+ * @implements Collector<Expr, array{string, string, string, int, ?string}>
  */
 final class MemberCollector implements Collector
 {
@@ -42,7 +43,7 @@ final class MemberCollector implements Collector
     }
 
     /**
-     * @return array{string, string, string, int}|null [to, kind, label, line]
+     * @return array{string, string, string, int, ?string}|null [to, kind, label, line, enclosing method]
      */
     public function processNode(Node $node, Scope $scope): ?array
     {
@@ -55,7 +56,7 @@ final class MemberCollector implements Collector
         if (($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall) && $node->name instanceof Identifier) {
             $class = $this->declaringClassOfMethod(TypeCombinator::removeNull($scope->getType($node->var)), $node->name->toString(), $scope);
 
-            return $this->row($class, $node->name->toString(), 'calls', "calls {$node->name->toString()}()", $node);
+            return $this->row($class, $node->name->toString(), 'calls', "calls {$node->name->toString()}()", $node, $scope);
         }
 
         if (($node instanceof Expr\PropertyFetch || $node instanceof Expr\NullsafePropertyFetch) && $node->name instanceof Identifier) {
@@ -68,19 +69,19 @@ final class MemberCollector implements Collector
                 default => '',
             };
 
-            return $this->row($this->declaringClassOfProperty(TypeCombinator::removeNull($receiver), $name, $scope), $name, 'fetches', "fetches $name$guard", $node);
+            return $this->row($this->declaringClassOfProperty(TypeCombinator::removeNull($receiver), $name, $scope), $name, 'fetches', "fetches $name$guard", $node, $scope);
         }
 
         if ($node instanceof Expr\StaticCall && $node->class instanceof Name && $node->name instanceof Identifier) {
             $class = $this->declaringClassOfMethod($scope->resolveTypeByName($node->class), $node->name->toString(), $scope);
 
-            return $this->row($class, $node->name->toString(), 'calls', "calls static {$node->name->toString()}()", $node);
+            return $this->row($class, $node->name->toString(), 'calls', "calls static {$node->name->toString()}()", $node, $scope);
         }
 
         if ($node instanceof Expr\New_ && $node->class instanceof Name) {
             $class = $scope->resolveName($node->class);
 
-            return $this->row($class, '__construct', 'calls', 'new '.Str::afterLast($class, '\\').'(...)', $node);
+            return $this->row($class, '__construct', 'calls', 'new '.Str::afterLast($class, '\\').'(...)', $node, $scope);
         }
 
         return null;
@@ -143,14 +144,31 @@ final class MemberCollector implements Collector
     }
 
     /**
-     * @return array{string, string, string, int}|null
+     * @return array{string, string, string, int, ?string}|null
      */
-    private function row(?string $class, string $member, string $kind, string $label, Node $node): ?array
+    private function row(?string $class, string $member, string $kind, string $label, Node $node, Scope $scope): ?array
     {
         if ($class === null || ! str_starts_with($class, $this->namespace)) {
             return null;
         }
 
-        return ["$class::$member", $kind, $label, $node->getStartLine()];
+        return ["$class::$member", $kind, $label, $node->getStartLine(), $this->enclosingMethod($scope)];
+    }
+
+    /**
+     * The named method the node sits in, through any closures; null at class
+     * or file level.
+     */
+    private function enclosingMethod(Scope $scope): ?string
+    {
+        for ($current = $scope; $current !== null; $current = $current->getParentScope()) {
+            $function = $current->getFunction();
+
+            if ($function instanceof MethodReflection) {
+                return $function->getName();
+            }
+        }
+
+        return null;
     }
 }

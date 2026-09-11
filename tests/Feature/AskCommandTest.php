@@ -118,7 +118,7 @@ it('prints the consumers of one member when asked for Class::member', function (
 
     expect($output)->toContain('CONSUMERS')
         ->and($output)->toContain(Post::class.'::isPublished')
-        ->and($output)->toContain('<- [calls: calls isPublished()] Workbench\App\Http\Controllers\PostController  workbench/app/Http/Controllers/PostController.php:12')
+        ->and($output)->toContain('<- [calls: calls isPublished()] Workbench\App\Http\Controllers\PostController::show  workbench/app/Http/Controllers/PostController.php:12')
         ->and($output)->not->toContain('NEIGHBOURHOOD');
 });
 

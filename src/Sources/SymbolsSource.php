@@ -68,11 +68,12 @@ final class SymbolsSource implements Source
                         // The member collector yields one row per node; the template
                         // collector yields a batch per rendering call, each row naming its template.
                         foreach ($fromTemplate ? $collected : [$collected] as $row) {
+                            // App code is recorded from its enclosing method; a test or a template from its path.
                             [$node, $at, $to, $kind, $label] = $fromTemplate
                                 ? [$row[0], "{$row[0]}:{$row[4]}", $row[1], $row[2], $row[3]]
-                                : [$from, "$path:{$row[3]}", $row[0], $row[1], $row[2]];
+                                : [$from === $path || $row[4] === null ? $from : "$from::{$row[4]}", "$path:{$row[3]}", $row[0], $row[1], $row[2]];
 
-                            if (Str::beforeLast($to, '::') === $node) {
+                            if (Str::beforeLast($to, '::') === Str::before($node, '::')) {
                                 continue;
                             }
 
