@@ -15,7 +15,7 @@ it('prints the labelled neighbourhood of a model in both directions with breadcr
     $this->artisan('quine:update')->assertSuccessful();
 
     $this->artisan('quine:ask', ['node' => Comment::class])
-        ->expectsOutputToContain('-> [relation: author() BelongsTo] '.Author::class.'  workbench/app/Models/Comment.php:24')
+        ->expectsOutputToContain('-> [relation: author() BelongsTo] '.Author::class.'  workbench/app/Models/Comment.php:25')
         ->expectsOutputToContain('<- [relation: comments() HasMany] '.Post::class)
         ->assertSuccessful();
 });
@@ -80,8 +80,8 @@ it('collapses uses edges to a count by default, but still walks through them', f
     Artisan::call('quine:ask', ['node' => Post::class]);
     $output = Artisan::output();
 
-    expect($output)->toContain('<- referenced by 4 classes (uses; --full lists them)')
-        ->and($output)->toContain('-> references 1 class (uses; --full lists them)')
+    expect($output)->toContain('<- referenced by 6 classes (uses; --full lists them)')
+        ->and($output)->toContain('-> references 2 classes (uses; --full lists them)')
         ->and($output)->not->toContain('PostController.php:6')
         ->and($output)->toContain('    via '.PostPublished::class.":\n        -> [event: queued listener] ".NotifyEditors::class.'@handle')
         // PostPolicy's only edge beyond the root is a uses edge: a via block holding nothing but a count is padding.
@@ -108,4 +108,48 @@ it('builds the graph first when there is none on disk', function () {
         ->assertSuccessful();
 
     expect(config()->string('quine.graph_path'))->toBeFile();
+});
+
+it('prints the consumers of one member when asked for Class::member', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    Artisan::call('quine:ask', ['node' => 'Post::isPublished']);
+    $output = Artisan::output();
+
+    expect($output)->toContain('CONSUMERS')
+        ->and($output)->toContain(Post::class.'::isPublished')
+        ->and($output)->toContain('<- [calls: calls isPublished()] Workbench\App\Http\Controllers\PostController  workbench/app/Http/Controllers/PostController.php:12')
+        ->and($output)->not->toContain('NEIGHBOURHOOD');
+});
+
+it('accepts the arrow form for a property and lists the template that reads it', function () {
+    $this->withTemplates();
+    $this->artisan('quine:update')->assertSuccessful();
+
+    Artisan::call('quine:ask', ['node' => 'Comment->author']);
+
+    expect(Artisan::output())->toContain('CONSUMERS')
+        ->toContain('<- [fetches: fetches author] workbench/resources/views/posts/comments.blade.php  workbench/resources/views/posts/comments.blade.php:4');
+});
+
+it('says when nothing consumes a member, and names the members that are consumed', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    $this->artisan('quine:ask', ['node' => 'Post::nope'])
+        ->expectsOutputToContain('nothing in the graph consumes '.Post::class.'::nope')
+        ->expectsOutputToContain('isPublished')
+        ->assertFailed();
+});
+
+it('summarises the consumed members of a class on one line each, without walking through them', function () {
+    $this->artisan('quine:update')->assertSuccessful();
+
+    Artisan::call('quine:ask', ['node' => Post::class, '--depth' => 3]);
+    $output = Artisan::output();
+
+    expect($output)->toContain('isPublished() called from 2 places')
+        ->and($output)->toContain('quine:ask Post::')
+        ->and($output)->toContain('<- [relation: posts() HasMany] '.Author::class)
+        ->and($output)->not->toContain('via '.Post::class.'::isPublished:')
+        ->and($output)->not->toContain('    <- [calls: calls isPublished()]');
 });

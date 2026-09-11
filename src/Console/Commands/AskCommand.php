@@ -33,7 +33,7 @@ class AskCommand extends Command
      * Print order: the kinds nobody would find by reading one file come first,
      * plain static references last.
      */
-    private const array ORDER = ['relation', 'model-event', 'event', 'gate', 'policy', 'schedule', 'livewire', 'component', 'include', 'route', 'renders', 'uses'];
+    private const array ORDER = ['relation', 'model-event', 'event', 'gate', 'policy', 'schedule', 'livewire', 'component', 'include', 'route', 'renders', 'calls', 'fetches', 'uses'];
 
     public function handle(GraphBuilder $builder, Project $project, Registry $recipes): int
     {
@@ -44,15 +44,18 @@ class AskCommand extends Command
             return self::FAILURE;
         }
 
-        $this->components->twoColumnDetail('<fg=yellow>NEIGHBOURHOOD</>', $node);
-        $this->walk($node, $graph, max(1, (int) $this->option('depth')));
+        // A member node (Class::member) has only inbound edges: who consumes it.
+        $member = str_contains($node, '::');
+
+        $this->components->twoColumnDetail($member ? '<fg=yellow>CONSUMERS</>' : '<fg=yellow>NEIGHBOURHOOD</>', $node);
+        $this->walk($node, $graph, $member ? 1 : max(1, (int) $this->option('depth')));
 
         $this->newLine();
         $this->components->twoColumnDetail('<fg=yellow>NUDGES</>', 'what to check before you edit');
 
         $nudges = [];
 
-        foreach ($this->modelsWithin($node, $graph) as $model) {
+        foreach ($this->modelsWithin($member ? Str::beforeLast($node, '::') : $node, $graph) as $model) {
             $nudges = [...$nudges, ...$recipes->nudges(Change::forNode($model), $graph)];
         }
 
@@ -105,6 +108,26 @@ class AskCommand extends Command
      */
     private function resolve(string $argument, Graph $graph, Project $project): ?string
     {
+        // Class::member or Class->member: resolve the class, then look for its member node.
+        if (preg_match('/^(.+?)(?:::|->)(\w+)$/', $argument, $parts) === 1 && ! str_contains($parts[1], '::')) {
+            $class = $this->resolve($parts[1], $graph, $project);
+
+            if ($class === null) {
+                return null;
+            }
+
+            $consumed = $this->consumedMembers($class, $graph);
+
+            if (! array_key_exists($parts[2], $consumed)) {
+                $this->error("nothing in the graph consumes $class::{$parts[2]}");
+                $this->line($consumed === [] ? "    no member of $class is consumed" : '    consumed members: '.implode(', ', array_keys($consumed)));
+
+                return null;
+            }
+
+            return "$class::{$parts[2]}";
+        }
+
         $nodes = array_keys($graph->models);
 
         foreach ($graph->edges as $edge) {
@@ -146,6 +169,58 @@ class AskCommand extends Command
     }
 
     /**
+     * The members of a class that something consumes, each with how many
+     * edges point at it, most consumed first.
+     *
+     * @return array<string, int>
+     */
+    private function consumedMembers(string $class, Graph $graph): array
+    {
+        $counts = [];
+
+        foreach ($graph->edges as $edge) {
+            if (str_starts_with($edge['to'], "$class::")) {
+                $member = Str::after($edge['to'], "$class::");
+                $counts[$member] = ($counts[$member] ?? 0) + 1;
+            }
+        }
+
+        arsort($counts);
+
+        return $counts;
+    }
+
+    /**
+     * One gray line per consumed member of a class, most consumed first,
+     * capped at eight: the member form of the command is where the detail is.
+     *
+     * @return list<string>
+     */
+    private function memberSummary(string $class, Graph $graph): array
+    {
+        $lines = [];
+        $members = $this->consumedMembers($class, $graph);
+
+        foreach (array_slice($members, 0, 8, true) as $member => $count) {
+            $kind = $graph->edgesTo("$class::$member")[0]['kind'];
+            $places = Str::plural('place', $count);
+            $what = match (true) {
+                $member === '__construct' => 'new '.class_basename($class)."(...) in $count $places",
+                $kind === 'fetches' => "$member fetched from $count $places",
+                default => "$member() called from $count $places",
+            };
+
+            $lines[] = "    <fg=gray><- $what (quine:ask ".class_basename($class)."::$member for them)</>";
+        }
+
+        if (count($members) > 8) {
+            $lines[] = '    <fg=gray>   and '.(count($members) - 8).' more consumed members</>';
+        }
+
+        return $lines;
+    }
+
+    /**
      * Breadth-first over the edges in both directions, printing each edge once,
      * indented by the hop at which it was reached. Beyond the root, the edges
      * of each expanded node sit under a "via <node>:" line so a deeper edge
@@ -180,7 +255,8 @@ class AskCommand extends Command
                     default => [null, null],
                 };
 
-                if ($arrow === null || $other === null) {
+                // A class's member nodes are summarised under the root, never walked through.
+                if ($arrow === null || $other === null || (str_contains($other, '::') && ! str_contains($current, '::'))) {
                     continue;
                 }
 
@@ -214,6 +290,10 @@ class AskCommand extends Command
             // root's own count already covers those classes.
             if ($onlyCounts) {
                 continue;
+            }
+
+            if ($current === $start && ! str_contains($start, '::')) {
+                $lines = [...$lines, ...$this->memberSummary($start, $graph)];
             }
 
             if ($collapsed['<-'] > 0) {
