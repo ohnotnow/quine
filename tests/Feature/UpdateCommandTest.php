@@ -34,7 +34,7 @@ it('ends with a human summary of models and nudges', function () {
         ->expectsOutputToContain('MODELS')
         ->expectsOutputToContain('author(): BelongsTo -> Author  NULLABLE comments.author_id')
         ->expectsOutputToContain('tags(): BelongsToMany -> Tag  via post_tag')
-        ->expectsOutputToContain('on created -> closure workbench/app/Models/Post.php:27')
+        ->expectsOutputToContain('on created -> closure workbench/app/Models/Post.php:28')
         ->expectsOutputToContain('accessors: excerpt')
         ->expectsOutputToContain('casts: id=int')
         ->expectsOutputToContain('NUDGES')
@@ -79,7 +79,7 @@ it('prints how many member consumers the symbol index holds', function () {
     $this->withTemplates();
 
     $this->artisan('quine:update')
-        ->expectsOutputToContain('symbols: 8 calls, 13 fetches from 18 files; templates: 2 indexed')
+        ->expectsOutputToContain('symbols: 12 calls, 16 fetches from 21 files; templates: 2 indexed')
         ->assertSuccessful();
 });
 

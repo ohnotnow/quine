@@ -10,6 +10,11 @@ namespace Ohffs\Quine;
  */
 final readonly class Change
 {
+    /**
+     * A method declaration line; the name is the first capture.
+     */
+    public const string DECLARATION = '/^\s*(?:(?:abstract|final|public|protected|private|static)\s+)*function\s+(\w+)\s*\(/';
+
     private function __construct(
         public ?string $path,
         public ?string $diff,
@@ -147,6 +152,27 @@ final readonly class Change
     }
 
     /**
+     * Methods whose body the diff edits, from the declaration each hunk
+     * header carries after its line numbers, the way git prints it with a
+     * function diff driver and EditDiffer prints it always. A diff without
+     * that text says nothing about which method was edited.
+     *
+     * @return list<string>
+     */
+    public function editedMethods(): array
+    {
+        $headers = [];
+
+        foreach (preg_split('/\R/', $this->diff ?? '') ?: [] as $line) {
+            if (preg_match('/^@@ [^@]*@@ (.+)$/', $line, $match) === 1) {
+                $headers[] = $match[1];
+            }
+        }
+
+        return array_keys($this->declarations($headers));
+    }
+
+    /**
      * Method name to its trimmed declaration line, for every declaration in the lines.
      *
      * @param  list<string>  $lines
@@ -157,7 +183,7 @@ final readonly class Change
         $found = [];
 
         foreach ($lines as $line) {
-            if (preg_match('/^\s*(?:(?:abstract|final|public|protected|private|static)\s+)*function\s+(\w+)\s*\(/', $line, $match) === 1) {
+            if (preg_match(self::DECLARATION, $line, $match) === 1) {
                 $found[$match[1]] = trim($line);
             }
         }

@@ -47,17 +47,17 @@ class NudgeCommand extends Command
 
             $graph = $this->freshGraph($builder, $project);
             $change = Change::forFile($path, ($this->editFromStdin($project) ?? $differ)->diff($path));
-            ['callers' => $callers, 'gaps' => $gaps, 'hidden' => $hidden, 'notes' => $notes] = (new Reach($graph, $project))->digest($change);
+            ['callers' => $callers, 'reach' => $reach, 'gaps' => $gaps, 'hidden' => $hidden, 'notes' => $notes] = (new Reach($graph, $project))->digest($change);
             $nudges = array_map('strval', $recipes->nudges($change, $graph));
 
-            if ($callers === [] && $gaps === [] && $hidden === [] && $notes === [] && $nudges === []) {
+            if ($callers === [] && $reach === [] && $gaps === [] && $hidden === [] && $notes === [] && $nudges === []) {
                 return self::SUCCESS;
             }
 
-            // "hang on" is earned by a broken caller, a gap, a hidden edge or a recipe; the rest is for the record.
-            $this->line(($callers !== [] || $gaps !== [] || $hidden !== [] || $nudges !== [] ? 'Quine: hang on. ' : 'Quine: fyi. ').$path);
+            // "hang on" is earned by a broken caller, somewhere the walk reached, a gap, a hidden edge or a recipe; the rest is for the record.
+            $this->line(($callers !== [] || $reach !== [] || $gaps !== [] || $hidden !== [] || $nudges !== [] ? 'Quine: hang on. ' : 'Quine: fyi. ').$path);
 
-            foreach ([...$callers, ...$gaps, ...$hidden, ...$notes, ...$nudges] as $line) {
+            foreach ([...$callers, ...$reach, ...$gaps, ...$hidden, ...$notes, ...$nudges] as $line) {
                 $this->line($line);
             }
         } catch (Throwable $e) {

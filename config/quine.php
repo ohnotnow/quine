@@ -23,6 +23,10 @@ return [
 
     'tia_graph' => null, // null = discover ~/.pest/tia/<basename>-*/graph.json
 
+    'reach' => [
+        'depth' => 6, // how many member hops the nudge walks from an edited method before giving up
+    ],
+
     'recipes' => [
         NullableBelongsTo::class,
     ],

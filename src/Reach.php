@@ -17,6 +17,11 @@ use Ohffs\Quine\Support\AppFiles;
  */
 final readonly class Reach
 {
+    /**
+     * Endpoint lines the hook prints per edited method before pointing at quine:ask.
+     */
+    private const int CAP = 10;
+
     public function __construct(private Graph $graph, private Project $project) {}
 
     /**
@@ -26,7 +31,7 @@ final readonly class Reach
      * the file, and quieter notes. Empty when the graph does not know the
      * file.
      *
-     * @return array{callers: list<string>, gaps: list<string>, hidden: list<string>, notes: list<string>}
+     * @return array{callers: list<string>, reach: list<string>, gaps: list<string>, hidden: list<string>, notes: list<string>}
      */
     public function digest(Change $change): array
     {
@@ -34,15 +39,21 @@ final readonly class Reach
         $node = $this->node($relativePath);
 
         if ($node === null || ! $change->touchesCode()) {
-            return ['callers' => [], 'gaps' => [], 'hidden' => [], 'notes' => []];
+            return ['callers' => [], 'reach' => [], 'gaps' => [], 'hidden' => [], 'notes' => []];
         }
 
         $template = str_ends_with($node, '.blade.php');
         ['untested' => $untested, 'tested' => $tested] = $this->templates($node, $template, $change);
         ['gap' => $coverageGap, 'note' => $coverageNote] = $this->coverageOf($relativePath);
+        ['lines' => $reach, 'templates' => $walked] = $template ? ['lines' => [], 'templates' => []] : $this->reachOf($node, $change);
+
+        // A template the walk reached has its line, trail and coverage there; not twice.
+        $untested = array_values(array_diff($untested, $walked));
+        $tested = array_values(array_diff($tested, $walked));
 
         return [
             'callers' => $template ? [] : $this->callers($node, $relativePath, $change),
+            'reach' => $reach,
             'gaps' => [
                 ...array_map(fn (string $path) => "reaches $path: no test renders this", $untested),
                 ...($coverageGap === null ? [] : [$coverageGap]),
@@ -53,6 +64,295 @@ final readonly class Reach
                 ...$coverageNote,
             ],
         ];
+    }
+
+    /**
+     * The walk lines for every method the edit removed, changed or edited the
+     * body of, capped for the hook, plus the templates they reached.
+     *
+     * @return array{lines: list<string>, templates: list<string>}
+     */
+    private function reachOf(string $node, Change $change): array
+    {
+        $lines = [];
+        $templates = [];
+
+        foreach (array_unique([...$change->removedMethods(), ...$change->changedMethods(), ...$change->editedMethods()]) as $method) {
+            ['lines' => $found, 'templates' => $reached] = $this->reachLines($this->memberNode($node, $method), self::CAP);
+            $lines = [...$lines, ...$found];
+            $templates = [...$templates, ...$reached];
+        }
+
+        return ['lines' => $lines, 'templates' => $templates];
+    }
+
+    /**
+     * The member node a declared method is consumed as. A scope is declared
+     * scopePublished and called published; an accessor is declared
+     * getTitleLabelAttribute, or titleLabel() returning Attribute, and read
+     * as title_label; the index knows the consumed name. A declared name that
+     * has consumers of its own is a plain method and stays as it is.
+     */
+    private function memberNode(string $class, string $method): string
+    {
+        if ($this->consumerEdges("$class::$method") !== []) {
+            return "$class::$method";
+        }
+
+        $consumed = match (true) {
+            preg_match('/^scope([A-Z]\w*)$/', $method, $match) === 1 => lcfirst($match[1]),
+            preg_match('/^[gs]et([A-Z]\w*)Attribute$/', $method, $match) === 1 => Str::snake($match[1]),
+            default => Str::snake($method),
+        };
+
+        return $this->consumerEdges("$class::$consumed") === [] ? "$class::$method" : "$class::$consumed";
+    }
+
+    /**
+     * The walk from one member as printed lines: endpoints (capped when a
+     * cap is given, then a pointer at quine:ask), frontiers, the depth stop.
+     *
+     * @return array{lines: list<string>, templates: list<string>}
+     */
+    public function reachLines(string $member, ?int $cap = null): array
+    {
+        $walk = $this->walk($member);
+        $lines = [];
+        $templates = [];
+        $more = $cap === null ? 0 : count($walk['endpoints']) - $cap;
+
+        foreach (array_slice($walk['endpoints'], 0, $cap) as $endpoint) {
+            $lines[] = $this->endpointLine($endpoint);
+
+            if ($endpoint['kind'] === 'template') {
+                $templates[] = $endpoint['node'];
+            }
+        }
+
+        if ($more > 0) {
+            $lines[] = "and $more more: quine:ask ".$this->short($member).' lists them';
+        }
+
+        foreach ($walk['frontiers'] as $frontier) {
+            $lines[] = 'reached '.$this->short($frontier).', nothing found that uses it';
+        }
+
+        if ($walk['stopped']) {
+            $lines[] = "walk stopped at depth {$this->depth()} below ".$this->short($member).' (quine.reach.depth)';
+        }
+
+        return ['lines' => $lines, 'templates' => $templates];
+    }
+
+    /**
+     * Where a member's consumers lead, member to member, through classes that
+     * only pass the call on, until something the outside world touches: a
+     * route, a template, a Livewire component, a listener, the schedule, a
+     * job, a mailable, a notification, an MCP tool. Tests are never
+     * endpoints and never walked through; the member's own class is never an
+     * endpoint. Bounded by a visited set and the configured depth.
+     *
+     * @return array{endpoints: list<array{node: string, kind: string, trail: list<string>, coverage: string}>, frontiers: list<string>, stopped: bool}
+     */
+    public function walk(string $member): array
+    {
+        $own = Str::before($member, '::');
+        $queue = [[$member, [$member], 0]];
+        $visited = [$member => true];
+        $endpoints = [];
+        $frontiers = [];
+        $stopped = false;
+
+        while ($queue !== []) {
+            [$current, $trail, $depth] = array_shift($queue);
+
+            foreach ($this->consumerEdges($current) as $edge) {
+                $from = $edge['from'];
+
+                if (isset($visited[$from]) || $this->isTestPath($from)) {
+                    continue;
+                }
+
+                $visited[$from] = true;
+
+                if (str_ends_with($from, '.blade.php')) {
+                    $endpoints[] = ['node' => $from, 'kind' => 'template', 'trail' => $trail, 'coverage' => $this->templateCoverage($from)];
+
+                    continue;
+                }
+
+                // Class-level code (a property default): nothing to follow.
+                if (! str_contains($from, '::')) {
+                    continue;
+                }
+
+                $class = Str::before($from, '::');
+                $kind = $class === $own ? null : $this->endpointKind($class, Str::after($from, '::'));
+
+                if ($kind !== null) {
+                    $endpoints[] = ['node' => $from, 'kind' => $kind, 'trail' => $trail, 'coverage' => $this->fileCoverage(Str::beforeLast((string) $edge['at'], ':'))];
+
+                    continue;
+                }
+
+                // A method nobody calls (a resource's toArray, a job's handle, a mailable's
+                // content) runs for whoever constructs or dispatches its class: walk on from there.
+                $next = $this->consumerEdges($from) === [] ? $this->entryOf($class, $visited) : $from;
+
+                if ($next === null) {
+                    $frontiers[] = $from;
+
+                    continue;
+                }
+
+                if ($depth + 1 >= $this->depth()) {
+                    $stopped = true;
+
+                    continue;
+                }
+
+                $visited[$next] = true;
+                $queue[] = [$next, [...$trail, $from, ...($next === $from ? [] : [$next])], $depth + 1];
+            }
+        }
+
+        return ['endpoints' => $endpoints, 'frontiers' => $frontiers, 'stopped' => $stopped];
+    }
+
+    /**
+     * The constructor or dispatch member of the class that something consumes,
+     * or null: the way in to a class whose methods the framework calls.
+     *
+     * @param  array<string, true>  $visited
+     */
+    private function entryOf(string $class, array $visited): ?string
+    {
+        foreach ($this->graph->edges as $edge) {
+            if (! in_array($edge['kind'], ['calls', 'fetches'], true) || ! str_starts_with($edge['to'], "$class::")) {
+                continue;
+            }
+
+            $member = Str::after($edge['to'], "$class::");
+
+            if (($member === '__construct' || str_starts_with($member, 'dispatch')) && ! isset($visited[$edge['to']])) {
+                return $edge['to'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * What makes the member the end of a walk, or null for a class the walk
+     * goes through. A route counts only for its own action; the rest are
+     * facts about the class.
+     */
+    private function endpointKind(string $class, string $method): ?string
+    {
+        $routes = $this->graph->edgesTo($class, 'route');
+
+        // A route to a class rather than an action ("page": a Livewire full-page component)
+        // makes every public method of it an entry point.
+        foreach ($routes as $edge) {
+            if (in_array(Str::before($edge['label'], ' '), [$method, 'page'], true)) {
+                return Str::beforeLast($edge['from'], ' [');
+            }
+        }
+
+        // A method of a routed class that no route names is a helper the walk goes through.
+        if ($routes !== []) {
+            return null;
+        }
+
+        if ($this->graph->edgesTo($class, 'livewire') !== []) {
+            return 'Livewire component';
+        }
+
+        if ($this->graph->edgesTo($class, 'component') !== []) {
+            return 'Blade component';
+        }
+
+        foreach ($this->graph->edgesFrom($class, 'renders') as $edge) {
+            return 'renders '.$edge['to'];
+        }
+
+        foreach ($this->graph->edges as $edge) {
+            if ($edge['kind'] === 'event' && Str::before($edge['to'], '@') === $class) {
+                return $edge['label'];
+            }
+        }
+
+        foreach ($this->graph->edgesTo($class, 'schedule') as $edge) {
+            return 'scheduled '.$edge['label'];
+        }
+
+        return match (true) {
+            str_contains($class, '\\Jobs\\') => 'job, heuristic',
+            str_contains($class, '\\Mail\\') => 'mailable, heuristic',
+            str_contains($class, '\\Notifications\\') => 'notification, heuristic',
+            str_contains($class, '\\Mcp\\') => 'MCP tool, heuristic',
+            default => null,
+        };
+    }
+
+    /**
+     * @param  array{node: string, kind: string, trail: list<string>, coverage: string}  $endpoint
+     */
+    private function endpointLine(array $endpoint): string
+    {
+        $trail = implode(' -> ', array_map($this->short(...), [...$endpoint['trail'], ...($endpoint['kind'] === 'template' ? [] : [$endpoint['node']])]));
+
+        $what = match (true) {
+            $endpoint['kind'] === 'template' => $endpoint['node'],
+            str_starts_with($endpoint['kind'], 'route ') => $endpoint['kind'].' ('.$this->short($endpoint['node']).')',
+            default => Str::before($endpoint['node'], '::').' ('.$endpoint['kind'].')',
+        };
+
+        return "reaches $what via $trail; {$endpoint['coverage']}";
+    }
+
+    /**
+     * The calls and fetches edges into a node.
+     *
+     * @return list<array{from: string, to: string, kind: string, label: string, at: ?string}>
+     */
+    private function consumerEdges(string $node): array
+    {
+        return array_values(array_filter($this->graph->edgesTo($node), fn (array $edge) => in_array($edge['kind'], ['calls', 'fetches'], true)));
+    }
+
+    private function isTestPath(string $node): bool
+    {
+        return str_ends_with($node, '.php') && ! str_ends_with($node, '.blade.php');
+    }
+
+    /**
+     * Class::member without the namespace.
+     */
+    private function short(string $member): string
+    {
+        return str_contains($member, '::') ? class_basename(Str::before($member, '::')).'::'.Str::after($member, '::') : class_basename($member);
+    }
+
+    private function depth(): int
+    {
+        return max(1, (int) config('quine.reach.depth', 6));
+    }
+
+    private function templateCoverage(string $path): string
+    {
+        return $this->tests($path) === [] ? 'no test renders this' : 'a test renders it (whether it exercises your change is yours to check)';
+    }
+
+    private function fileCoverage(string $path): string
+    {
+        $tests = $this->tests($path);
+
+        return match (count($tests)) {
+            0 => "no test covers $path",
+            1 => "1 test file covers $path: {$tests[0]}",
+            default => count($tests)." test files cover $path",
+        };
     }
 
     /**
@@ -88,7 +388,7 @@ final readonly class Reach
         }
 
         foreach ($this->graph->edges as $edge) {
-            if ($edge['from'] === $node || $edge['to'] === $node || str_starts_with($edge['from'], "$node::")) {
+            if ($edge['from'] === $node || $edge['to'] === $node || str_starts_with($edge['from'], "$node::") || str_starts_with($edge['to'], "$node::")) {
                 return true;
             }
         }
@@ -121,7 +421,7 @@ final readonly class Reach
 
                 // With symbol edges for the class, the graph is the answer; the name match is for a graph without them.
                 if ($this->hasSymbolEdges($node)) {
-                    $found = $this->consumers($node, $method);
+                    $found = $this->consumers($node, Str::after($this->memberNode($node, $method), "$node::"));
 
                     if ($found !== []) {
                         $lines[] = "$label; called from ".implode(', ', $found);
@@ -305,7 +605,7 @@ final readonly class Reach
             // member the edit removed or changed; without them, when its text names one.
             if ($this->hasTemplateSymbolEdges()) {
                 foreach ([...$change->removedMethods(), ...$change->changedMethods()] as $method) {
-                    foreach ($this->graph->edgesTo("$node::$method") as $edge) {
+                    foreach ($this->graph->edgesTo($this->memberNode($node, $method)) as $edge) {
                         if (str_ends_with($edge['from'], '.blade.php')) {
                             $found[] = $edge['from'];
                         }

@@ -10,6 +10,7 @@ use Ohffs\Quine\Change;
 use Ohffs\Quine\Graph;
 use Ohffs\Quine\GraphBuilder;
 use Ohffs\Quine\Project;
+use Ohffs\Quine\Reach;
 use Ohffs\Quine\Recipes\Registry;
 
 class AskCommand extends Command
@@ -49,6 +50,16 @@ class AskCommand extends Command
 
         $this->components->twoColumnDetail($member ? '<fg=yellow>CONSUMERS</>' : '<fg=yellow>NEIGHBOURHOOD</>', $node);
         $this->walk($node, $graph, $member ? 1 : max(1, (int) $this->option('depth')));
+
+        // Where the member's consumers lead, member to member, to something the outside world touches.
+        if ($member) {
+            $this->newLine();
+            $this->components->twoColumnDetail('<fg=yellow>REACHES</>', 'where it ends up');
+
+            foreach ((new Reach($graph, $project))->reachLines($node)['lines'] as $line) {
+                $this->line("    $line");
+            }
+        }
 
         $this->newLine();
         $this->components->twoColumnDetail('<fg=yellow>NUDGES</>', 'what to check before you edit');

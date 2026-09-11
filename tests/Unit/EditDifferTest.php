@@ -35,6 +35,7 @@ it('diffs an edit as removed and added lines with three lines of context from th
     $differ = new EditDiffer($this->project, "        return \$this->belongsTo(Author::class);\n", "        return \$this->belongsTo(Author::class)->withDefault();\n");
 
     expect($differ->diff($this->path))->toBe(implode("\n", [
+        '@@ -7,1 +7,1 @@ public function author()',
         ' {',
         '     public function author()',
         '     {',
@@ -66,6 +67,7 @@ it('shows the lines old and new share as context, not as removed and added', fun
     $differ = new EditDiffer($this->project, $old, $new);
 
     expect($differ->diff($this->path))->toBe(implode("\n", [
+        '@@ -5,0 +5,3 @@',
         ' ',
         ' class Scratch',
         ' {',

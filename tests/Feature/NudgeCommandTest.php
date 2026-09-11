@@ -75,7 +75,7 @@ it('names the observer, policy or listener chain only when the edit touches it',
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    // Post's own booted() closure (Post.php:26) is in the file being edited, so it is not hidden and not printed.
+    // Post's own booted() closure (Post.php:27) is in the file being edited, so it is not hidden and not printed.
     expect(Artisan::output())->toBe(implode("\n", [
         'Quine: hang on. workbench/app/Models/Post.php',
         'dispatches Workbench\\App\\Events\\PostPublished -> Workbench\\App\\Listeners\\NotifyEditors@handle (queued listener)',
@@ -131,10 +131,24 @@ it('names the resolved consumers of a method the edit removed, with no heuristic
     // isPublished() is in no template, and the diff goes nowhere near the observer, policy or event.
     expect(Artisan::output())->toBe(implode("\n", [
         'Quine: hang on. workbench/app/Models/Post.php',
-        'Post::isPublished() removed; called from workbench/app/Http/Controllers/PostController.php:12, workbench/tests/Feature/PostPageTest.php:14',
+        'Post::isPublished() removed; called from workbench/app/Http/Controllers/PostController.php:12, workbench/app/Support/PostDigest.php:14, workbench/app/Support/PostSummary.php:14, workbench/tests/Feature/PostPageTest.php:14',
+        'reaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show; no test covers workbench/app/Http/Controllers/PostController.php',
+        'reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show; no test covers workbench/app/Http/Controllers/PostSummaryController.php',
+        'reached PostDigest::digest, nothing found that uses it',
         'tia cache is stale: 1 test files are not in it (CommentPageTest.php): re-run vendor/bin/pest --tia',
         '1 test file covers this file: PostPageTest.php (vendor/bin/pest --tia runs it)',
     ])."\n");
+});
+
+it('stops the walk at the configured depth and says so once', function () {
+    config()->set('quine.reach.depth', 1);
+    app()->instance(Differ::class, new FakeDiffer("-    public function isPublished(): bool\n"));
+
+    Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
+
+    expect(Artisan::output())->toContain("\nreaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show; no test covers workbench/app/Http/Controllers/PostController.php\n")
+        ->toContain("\nwalk stopped at depth 1 below Post::isPublished (quine.reach.depth)\n")
+        ->not->toContain('PostSummaryController');
 });
 
 it('names the callers of a method whose signature the edit changed, and says nothing about a body-only edit', function () {
@@ -148,7 +162,7 @@ it('names the callers of a method whose signature the edit changed, and says not
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    expect(Artisan::output())->toContain("\nPost::isPublished() signature changed; called from workbench/app/Http/Controllers/PostController.php:12, workbench/tests/Feature/PostPageTest.php:14\n");
+    expect(Artisan::output())->toContain("\nPost::isPublished() signature changed; called from workbench/app/Http/Controllers/PostController.php:12, workbench/app/Support/PostDigest.php:14, workbench/app/Support/PostSummary.php:14, workbench/tests/Feature/PostPageTest.php:14\n");
 
     app()->instance(Differ::class, new FakeDiffer("-        return \$this->created_at !== null;\n+        return \$this->exists;\n"));
 
@@ -187,7 +201,59 @@ it('takes the edit itself from stdin with --edit instead of asking git', functio
     $command->setLaravel(app());
     $command->run($input, $output);
 
-    expect($output->fetch())->toContain("\nPost::isPublished() removed; called from workbench/app/Http/Controllers/PostController.php:12, workbench/tests/Feature/PostPageTest.php:14\n");
+    expect($output->fetch())->toContain("\nPost::isPublished() removed; called from workbench/app/Http/Controllers/PostController.php:12, workbench/app/Support/PostDigest.php:14, workbench/app/Support/PostSummary.php:14, workbench/tests/Feature/PostPageTest.php:14\n");
+});
+
+it('walks from a method whose body the edit changed, through the header the edit differ writes', function () {
+    app()->instance(Differ::class, new FakeDiffer(''));
+    $stdin = fopen('php://memory', 'r+');
+    // The written file holds the new text: this edit turned === into !== inside isPublished().
+    fwrite($stdin, json_encode(['old' => "        return \$this->created_at === null;\n", 'new' => "        return \$this->created_at !== null;\n"]));
+    rewind($stdin);
+    $input = new ArrayInput(['file' => 'workbench/app/Models/Post.php', '--edit' => true]);
+    $input->setStream($stdin);
+    $output = new BufferedOutput;
+
+    $command = app(NudgeCommand::class);
+    $command->setLaravel(app());
+    $command->run($input, $output);
+
+    expect($output->fetch())->toStartWith("Quine: hang on. workbench/app/Models/Post.php\nreaches route GET|HEAD /posts/{post} (PostController::show) via Post::isPublished -> PostController::show; no test covers workbench/app/Http/Controllers/PostController.php\n")
+        ->toContain("\nreached PostDigest::digest, nothing found that uses it\n")
+        ->not->toContain('isPublished() removed');
+});
+
+it('walks from a scope under the name it is called by, and treats a controller method no route names as a pass-through', function () {
+    app()->instance(Differ::class, new FakeDiffer(implode("\n", [
+        '@@ -66,1 +66,1 @@ public function scopePublished(Builder $query): void',
+        '     {',
+        '-        $query->whereNotNull(\'created_at\');',
+        '+        $query->whereNotNull(\'published_at\');',
+        '     }',
+    ])."\n"));
+
+    Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
+
+    expect(Artisan::output())->toContain("\nreached PostController::published, nothing found that uses it\n")
+        ->not->toContain('renders');
+});
+
+it('names the consumers of a removed scope or accessor under the name they consume it by', function () {
+    app()->instance(Differ::class, new FakeDiffer("-    public function scopePublished(Builder \$query): void\n"));
+    Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
+
+    expect(Artisan::output())->toContain("\nPost::scopePublished() removed; called from workbench/app/Http/Controllers/PostController.php:17\n")
+        ->not->toContain('no caller found');
+
+    app()->instance(Differ::class, new FakeDiffer("-    public function getTitleLabelAttribute(): string\n"));
+    Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
+
+    expect(Artisan::output())->toContain("\nPost::getTitleLabelAttribute() removed; called from workbench/app/Http/Controllers/PostController.php:27\n");
+
+    app()->instance(Differ::class, new FakeDiffer("-    protected function excerpt(): Attribute\n"));
+    Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
+
+    expect(Artisan::output())->toContain("\nPost::excerpt() removed; called from workbench/app/Http/Controllers/PostController.php:27\n");
 });
 
 it('prints the reach of a controller edit, which used to be silent', function () {
@@ -316,7 +382,7 @@ it('falls back to the name match when the graph has no symbol edges for the clas
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    expect(Artisan::output())->toContain("\nPost::isPublished() removed; called by name from workbench/app/Http/Controllers/PostController.php:12, workbench/tests/Feature/PostPageTest.php:14 (name match, heuristic)\n");
+    expect(Artisan::output())->toContain("\nPost::isPublished() removed; called by name from workbench/app/Http/Controllers/PostController.php:12, workbench/app/Support/PostDigest.php:14, workbench/app/Support/PostSummary.php:14, workbench/tests/Feature/PostPageTest.php:14 (name match, heuristic)\n");
 });
 
 it('reaches a template through a symbol edge to the changed member, not by the name in its text', function () {
@@ -326,7 +392,9 @@ it('reaches a template through a symbol edge to the changed member, not by the n
     app()->instance(Differ::class, new FakeDiffer("-    public function author(): BelongsTo\n"));
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    expect(Artisan::output())->toContain('templates reached: workbench/resources/views/posts/show.blade.php');
+    // The walk reaches the template itself, with its trail and coverage, so the templates-reached note does not repeat it.
+    expect(Artisan::output())->toContain('reaches workbench/resources/views/posts/show.blade.php via Post::author; a test renders it (whether it exercises your change is yours to check)')
+        ->not->toContain('templates reached: workbench/resources/views/posts/show.blade.php');
 
     // show.blade.php:3 reads $post->author->name: the word "name" is in its text, but the edge is
     // to Author::name. A name match for a removed Post::name() would list it; the edge test does not.

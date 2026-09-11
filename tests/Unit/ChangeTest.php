@@ -25,3 +25,17 @@ it('describes a node being asked about', function () {
         ->and($change->isNode())->toBeTrue()
         ->and($change->addedLines())->toBe([]);
 });
+
+it('names the methods whose declaration a hunk header carries, as the edited methods', function () {
+    $change = Change::forFile('workbench/app/Models/Post.php', implode("\n", [
+        '@@ -33,1 +33,1 @@ public function isPublished(): bool',
+        '     {',
+        '-        return $this->created_at !== null;',
+        '+        return $this->exists;',
+        '     }',
+    ])."\n");
+
+    expect($change->editedMethods())->toBe(['isPublished'])
+        ->and(Change::forFile('workbench/app/Models/Post.php', "@@ -1,1 +1,1 @@\n-a\n+b\n")->editedMethods())->toBe([])
+        ->and(Change::forFile('workbench/app/Models/Post.php', "-a\n+b\n")->editedMethods())->toBe([]);
+});

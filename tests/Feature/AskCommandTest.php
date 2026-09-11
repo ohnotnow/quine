@@ -80,7 +80,7 @@ it('collapses uses edges to a count by default, but still walks through them', f
     Artisan::call('quine:ask', ['node' => Post::class]);
     $output = Artisan::output();
 
-    expect($output)->toContain('<- referenced by 6 classes (uses; --full lists them)')
+    expect($output)->toContain('<- referenced by 9 classes (uses; --full lists them)')
         ->and($output)->toContain('-> references 2 classes (uses; --full lists them)')
         ->and($output)->not->toContain('PostController.php:6')
         ->and($output)->toContain('    via '.PostPublished::class.":\n        -> [event: queued listener] ".NotifyEditors::class.'@handle')
@@ -119,6 +119,9 @@ it('prints the consumers of one member when asked for Class::member', function (
     expect($output)->toContain('CONSUMERS')
         ->and($output)->toContain(Post::class.'::isPublished')
         ->and($output)->toContain('<- [calls: calls isPublished()] Workbench\App\Http\Controllers\PostController::show  workbench/app/Http/Controllers/PostController.php:12')
+        ->and($output)->toContain('REACHES')
+        ->and($output)->toContain('    reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show; no test covers workbench/app/Http/Controllers/PostSummaryController.php')
+        ->and($output)->toContain('    reached PostDigest::digest, nothing found that uses it')
         ->and($output)->not->toContain('NEIGHBOURHOOD');
 });
 
@@ -147,7 +150,7 @@ it('summarises the consumed members of a class on one line each, without walking
     Artisan::call('quine:ask', ['node' => Post::class, '--depth' => 3]);
     $output = Artisan::output();
 
-    expect($output)->toContain('isPublished() called from 2 places')
+    expect($output)->toContain('isPublished() called from 4 places')
         ->and($output)->toContain('quine:ask Post::')
         ->and($output)->toContain('<- [relation: posts() HasMany] '.Author::class)
         ->and($output)->not->toContain('via '.Post::class.'::isPublished:')

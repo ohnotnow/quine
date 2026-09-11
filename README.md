@@ -96,7 +96,7 @@ php artisan quine:ask 'Comment::author'
 ```
 Quine: hang on. workbench/app/Models/Comment.php
 Comment::author() removed; called from workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5
-reaches workbench/resources/views/posts/comments.blade.php: no test renders this
+reaches workbench/resources/views/posts/comments.blade.php via Comment::author; no test renders this
 no test covers this file
 ```
 
