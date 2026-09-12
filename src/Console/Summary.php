@@ -125,14 +125,31 @@ final class Summary
 
         $line = sprintf('  symbols: %d calls, %d fetches from %d files', $symbols['calls'] ?? 0, $symbols['fetches'] ?? 0, $symbols['files'] ?? 0);
 
+        $unreadable = is_array($symbols['templates_unreadable'] ?? null) ? $symbols['templates_unreadable'] : [];
+        $partial = is_array($symbols['templates_partial'] ?? null) ? $symbols['templates_partial'] : [];
+
         if (($symbols['bladestan'] ?? false) === true) {
             $line .= sprintf('; templates: %d indexed', $symbols['templates'] ?? 0);
-            $line .= ($symbols['templates_failed'] ?? 0) > 0 ? sprintf(', %d failed to compile', $symbols['templates_failed']) : '';
+            $line .= $partial === [] ? '' : sprintf(' (%d without composer data)', count($partial));
+            $line .= $unreadable === [] ? '' : sprintf(', %d quine could not read', count($unreadable));
+            $line .= $partial === [] && $unreadable === [] ? '' : ' (quine:update -v says which)';
         } else {
             $line .= '; templates: not indexed (tomasvotruba/bladestan is not installed)';
         }
 
         $this->command->line($line);
+
+        // A template quine could not read is one whose reads it only knows by name matching; one
+        // read without its composer data has every variable a composer adds untyped.
+        if ($this->command->getOutput()->isVerbose()) {
+            foreach ($unreadable as $path => $error) {
+                $this->command->line("  could not read $path: $error");
+            }
+
+            foreach ($partial as $path => $error) {
+                $this->command->line("  read $path without its view composers' data: $error");
+            }
+        }
     }
 
     public function nudges(Registry $recipes): void

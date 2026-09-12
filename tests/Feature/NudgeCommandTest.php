@@ -424,3 +424,12 @@ it('asserts that no test runs a file only when the coverage data is complete', f
     expect(Artisan::output())->toContain("\nno test runs workbench/resources/views/posts/comments.blade.php, by the coverage data\n")
         ->and(Artisan::output())->not->toContain('coverage data predates');
 });
+
+it('says when a template the edit reaches is one bladestan could not compile, so its reads are known by name only', function () {
+    $this->withTemplates();
+    app()->instance(Differ::class, new FakeDiffer("-        return view('posts.broken', ['post' => \$post]);\n+        return view('posts.broken', ['post' => \$post->fresh()]);\n"));
+
+    Artisan::call('quine:nudge', ['file' => 'workbench/app/Http/Controllers/PostSummaryController.php']);
+
+    expect(Artisan::output())->toContain("\nquine could not read the template workbench/resources/views/posts/broken.blade.php (View [posts/broken.blade.php] contains syntx errors.), so what it shows is matched by name only\n");
+});

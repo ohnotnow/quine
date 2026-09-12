@@ -1,0 +1,38 @@
+# Bladestan's own extension.neon, minus what quine never uses: its linting
+# rule, its error formatter, and BladeSignatureCacheMetaExtension, which
+# hashes every Blade file into PHPStan's result-cache key and so throws the
+# whole cache away on any template edit. Quine re-reads only the files that
+# render a changed template instead (SymbolsSource::renderersOfChangedTemplates).
+# Every class below is Bladestan's; only the list is quine's. Bladestan's
+# template-compiler/services.neon and php-parser.neon are still passed as they are.
+services:
+    - PhpParser\PrettyPrinter\Standard
+    - PhpParser\ConstExprEvaluator
+    - Illuminate\Filesystem\Filesystem
+
+    - Bladestan\Laravel\View\BladeCompilerFactory
+    -
+        class: Illuminate\View\Compilers\BladeCompiler
+        factory: ['@Bladestan\Laravel\View\BladeCompilerFactory', 'create']
+
+    - Bladestan\ViewRuleHelper
+    - Bladestan\Blade\PhpLineToTemplateLineResolver
+    - Bladestan\ErrorReporting\Blade\TemplateErrorsFactory
+    - Bladestan\NodeAnalyzer\TemplateFilePathResolver
+    - Bladestan\NodeAnalyzer\LaravelViewFunctionMatcher
+    - Bladestan\NodeAnalyzer\MailablesContentMatcher
+    - Bladestan\NodeAnalyzer\BladeViewMethodsMatcher
+    - Bladestan\NodeAnalyzer\ViewDataParametersAnalyzer
+    - Bladestan\NodeAnalyzer\ViewVariableAnalyzer
+    - Bladestan\NodeAnalyzer\CompactFunctionCallParameterResolver
+    - Bladestan\NodeAnalyzer\MagicViewWithCallParameterResolver
+    - Bladestan\NodeAnalyzer\ClassPropertiesResolver
+    - Bladestan\NodeAnalyzer\ValueResolver
+    - Bladestan\Compiler\BladeToPHPCompiler
+    - Bladestan\PhpParser\NodeVisitor\BladeLineNumberNodeVisitor
+    - Bladestan\PhpParser\ArrayStringToArrayConverter
+
+    -
+        class: Bladestan\PhpParser\NodeVisitor\ViewFunctionArgumentsNodeVisitor
+        tags:
+            - phpstan.parser.richParserNodeVisitor

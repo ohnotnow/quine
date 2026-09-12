@@ -32,5 +32,10 @@ class WorkbenchServiceProvider extends ServiceProvider
 
         Gate::define('editor', fn ($user) => true);
         Gate::policy(Post::class, PostPolicy::class);
+
+        // A composer Bladestan cannot run (Blaze's real one is typed to Illuminate\View\View, which Bladestan's collector is not).
+        view()->composer('posts.composed', function ($view): void {
+            abort(500, 'this composer only runs for the real view');
+        });
     }
 }

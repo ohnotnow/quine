@@ -13,6 +13,7 @@ use PhpParser\Node\Name;
 use PhpParser\NodeFinder;
 use PHPStan\Analyser\Scope;
 use PHPStan\Collectors\Collector;
+use PHPStan\Node\FileNode;
 use PHPStan\Reflection\ClassReflection;
 use PHPStan\Reflection\MethodReflection;
 use PHPStan\Type\Type;
@@ -23,7 +24,7 @@ use PHPStan\Type\TypeCombinator;
  * method, who reads which property. Larastan has already resolved the
  * Eloquent magic by the time a node reaches here.
  *
- * @implements Collector<Expr, array{string, string, string, int, ?string, int}>
+ * @implements Collector<Node, array{string, string, string, int, ?string, ?string}>
  */
 final class MemberCollector implements Collector
 {
@@ -55,11 +56,12 @@ final class MemberCollector implements Collector
     ];
 
     /**
-     * File, then start position, of every fetch or call sitting inside a sink's
-     * key argument, with the sink's label. Filled when the sink call is met,
-     * read when the nodes inside it are.
+     * Start position of every fetch or call sitting inside a sink's key
+     * argument in the file being analysed, with the sink's label. Filled
+     * from the whole file before any row is made, so a row can carry its
+     * sink and travel through PHPStan's result cache with it.
      *
-     * @var array<string, array<int, string>>
+     * @var array<int, string>
      */
     private array $sinks = [];
 
@@ -70,21 +72,34 @@ final class MemberCollector implements Collector
 
     public function getNodeType(): string
     {
-        return Expr::class;
+        return Node::class;
     }
 
     /**
-     * @return array{string, string, string, int, ?string, int}|null [to, kind, label, line, enclosing method, file position]
+     * @return array{string, string, string, int, ?string, ?string}|null [to, kind, label, line, enclosing method, sink]
      */
     public function processNode(Node $node, Scope $scope): ?array
     {
+        // PHPStan hands the whole file over before walking it: the moment to find the sinks.
+        if ($node instanceof FileNode) { // @phpstan-ignore phpstanApi.instanceofAssumption
+            $this->sinks = [];
+
+            foreach ((new NodeFinder)->findInstanceOf($node->getNodes(), Expr\CallLike::class) as $call) {
+                $this->markSink($call);
+            }
+
+            return null;
+        }
+
+        if (! $node instanceof Expr) {
+            return null;
+        }
+
         // PHPStan also walks a nullsafe fetch or call as a plain one with the
         // receiver narrowed to non-null; the nullsafe node itself is the record.
         if ($node->getAttribute('virtualNullsafePropertyFetch') === true || $node->getAttribute('virtualNullsafeMethodCall') === true) {
             return null;
         }
-
-        $this->markSink($node, $scope);
 
         if (($node instanceof Expr\MethodCall || $node instanceof Expr\NullsafeMethodCall) && $node->name instanceof Identifier) {
             $class = $this->declaringClassOfMethod(TypeCombinator::removeNull($scope->getType($node->var)), $node->name->toString(), $scope);
@@ -177,7 +192,7 @@ final class MemberCollector implements Collector
     }
 
     /**
-     * @return array{string, string, string, int, ?string, int}|null
+     * @return array{string, string, string, int, ?string, ?string}|null
      */
     private function row(?string $class, string $member, string $kind, string $label, Node $node, Scope $scope): ?array
     {
@@ -185,34 +200,23 @@ final class MemberCollector implements Collector
             return null;
         }
 
-        return ["$class::$member", $kind, $label, $node->getStartLine(), $this->enclosingMethod($scope), $node->getStartFilePos()];
+        return ["$class::$member", $kind, $label, $node->getStartLine(), $this->enclosingMethod($scope), $this->sinks[$node->getStartFilePos()] ?? null];
     }
 
     /**
-     * The sink whose key argument holds the node at this position in the
-     * file, or null. Asked after the file has been collected: PHPStan hands
-     * the expressions inside an argument to the collector BEFORE the call
-     * around them, so a row cannot carry its sink when it is made.
+     * When the call is a sink, remember every fetch and call inside its key
+     * argument so their rows can say what they feed.
      */
-    public function sinkAt(string $file, int $position): ?string
-    {
-        return $this->sinks[$file][$position] ?? null;
-    }
-
-    /**
-     * When the node is a sink call, remember every fetch and call inside its
-     * key argument so their rows can be told what they feed.
-     */
-    private function markSink(Node $node, Scope $scope): void
+    private function markSink(Expr\CallLike $node): void
     {
         $label = $this->sinkLabel($node);
 
-        if ($label === null || ! $node instanceof Expr\CallLike || $node->isFirstClassCallable() || $node->getArgs() === []) {
+        if ($label === null || $node->isFirstClassCallable() || $node->getArgs() === []) {
             return;
         }
 
         foreach ((new NodeFinder)->findInstanceOf($node->getArgs()[0]->value, Expr::class) as $inner) {
-            $this->sinks[$scope->getFile()][$inner->getStartFilePos()] = $label;
+            $this->sinks[$inner->getStartFilePos()] = $label;
         }
     }
 

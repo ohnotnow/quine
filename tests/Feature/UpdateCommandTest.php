@@ -80,8 +80,29 @@ it('prints how many member consumers the symbol index holds', function () {
     $this->withTemplates();
 
     $this->artisan('quine:update')
-        ->expectsOutputToContain('symbols: 15 calls, 34 fetches from 23 files; templates: 2 indexed')
+        ->expectsOutputToContain('symbols: 15 calls, 35 fetches from 23 files; templates: 3 indexed (1 without composer data), 1 quine could not read (quine:update -v says which)')
         ->assertSuccessful();
+});
+
+it('names each template bladestan failed to compile, with the error, when asked for verbose output', function () {
+    $this->withTemplates();
+
+    $this->artisan('quine:update', ['-v' => true])
+        ->expectsOutputToContain('could not read workbench/resources/views/posts/broken.blade.php: View [posts/broken.blade.php] contains syntx errors.')
+        ->expectsOutputToContain("read workbench/resources/views/posts/composed.blade.php without its view composers' data: ")
+        ->assertSuccessful();
+});
+
+it('keeps the typed reads of a template whose view composer it could not call', function () {
+    $this->withTemplates();
+
+    expect(updatedGraph()->edgesFrom('workbench/resources/views/posts/composed.blade.php', 'fetches'))->toContain([
+        'from' => 'workbench/resources/views/posts/composed.blade.php',
+        'to' => 'Workbench\App\Models\Post::title',
+        'kind' => 'fetches',
+        'label' => 'fetches title',
+        'at' => 'workbench/resources/views/posts/composed.blade.php:2',
+    ]);
 });
 
 it('still indexes PHP members and says so when bladestan is not installed', function () {

@@ -33,7 +33,11 @@ class Bladestan
     }
 
     /**
-     * Bladestan's extension config plus its parser override, located from the class.
+     * The PHPStan config that puts Bladestan's classes in the container:
+     * its compiler services and parser override as it ships them, and
+     * quine's own copy of its extension list, which leaves out the
+     * result-cache extension that discards the whole cache on any Blade
+     * edit (resources/phpstan/bladestan.neon says what else is left out).
      *
      * @return list<string>
      */
@@ -42,7 +46,11 @@ class Bladestan
         $file = (new ReflectionClass(BladeToPHPCompiler::class))->getFileName();
         $root = dirname($file === false ? '' : $file, 3);
 
-        return [$root.'/config/extension.neon', $root.'/config/template-compiler/php-parser.neon'];
+        return [
+            $root.'/config/template-compiler/services.neon',
+            $root.'/config/template-compiler/php-parser.neon',
+            dirname(__DIR__, 2).'/resources/phpstan/bladestan.neon',
+        ];
     }
 
     /**
@@ -69,17 +77,31 @@ class Bladestan
     }
 
     /**
+     * The file a view name resolves to, or null when there is none.
+     */
+    public function pathOf(Container $phpstan, string $name): ?string
+    {
+        try {
+            return $phpstan->getByType(TemplateFilePathResolver::class)->resolveExistingFilePath($name);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+    }
+
+    /**
      * The template compiled to PHP, with the map from PHP line to the blade
-     * file and line it came from. Null when the view does not exist.
+     * file and line it came from, and what Bladestan could not do on the way
+     * (a syntax error it recovered from by dropping the body, a missing
+     * include). Null when the view does not exist.
      *
      * @param  array<string, Type>  $parameters
-     * @return array{php: string, lines: array<int, array<string, int>>}|null
+     * @return array{php: string, lines: array<int, array<string, int>>, errors: list<array{string, string}>}|null errors are [message, identifier]: `bladestan.parsing` means the body was dropped
      */
     public function compile(Container $phpstan, string $name, array $parameters): ?array
     {
-        try {
-            $path = $phpstan->getByType(TemplateFilePathResolver::class)->resolveExistingFilePath($name);
-        } catch (InvalidArgumentException) {
+        $path = $this->pathOf($phpstan, $name);
+
+        if ($path === null) {
             return null;
         }
 
@@ -91,6 +113,10 @@ class Bladestan
 
         $compiled = $phpstan->getByType(BladeToPHPCompiler::class)->compileContent($path, $name, $contents, $parameters);
 
-        return ['php' => $compiled->phpFileContents, 'lines' => $compiled->phpToTemplateLines];
+        return [
+            'php' => $compiled->phpFileContents,
+            'lines' => $compiled->phpToTemplateLines,
+            'errors' => array_map(fn (array $error) => [(string) $error[0], (string) $error[1]], $compiled->errors),
+        ];
     }
 }

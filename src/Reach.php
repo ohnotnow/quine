@@ -51,6 +51,7 @@ final readonly class Reach
         // A template the walk reached has its line, trail and coverage there; not twice.
         $untested = array_values(array_diff($untested, $walked));
         $tested = array_values(array_diff($tested, $walked));
+        $unreadable = $this->unreadable([...$untested, ...$tested, ...$walked]);
 
         return [
             'callers' => $template ? [] : $this->callers($node, $relativePath, $change),
@@ -62,6 +63,7 @@ final readonly class Reach
             'hidden' => $template ? [] : $this->hiddenEdges($node, $relativePath, $change),
             'notes' => [
                 ...($tested === [] ? [] : ['templates that show this: '.implode(', ', $tested).'. Each has a test that renders it; a test rendering a template is not a test of your change']),
+                ...$unreadable,
                 ...$coverageNote,
             ],
         ];
@@ -547,6 +549,29 @@ final readonly class Reach
                 } elseif ($what === 'removed') {
                     $lines[] = "$label and nothing called it by name";
                 }
+            }
+        }
+
+        return $lines;
+    }
+
+    /**
+     * One line per reached template Bladestan could not compile at the last
+     * quine:update, with its reason: what quine says about such a template
+     * comes from name matching, not typed reads, and the reader should know.
+     *
+     * @param  list<string>  $templates
+     * @return list<string>
+     */
+    private function unreadable(array $templates): array
+    {
+        $symbols = $this->graph->meta['symbols'] ?? null;
+        $failed = is_array($symbols) && is_array($symbols['templates_unreadable'] ?? null) ? $symbols['templates_unreadable'] : [];
+        $lines = [];
+
+        foreach (array_unique($templates) as $template) {
+            if (isset($failed[$template]) && is_string($failed[$template])) {
+                $lines[] = "quine could not read the template $template ({$failed[$template]}), so what it shows is matched by name only";
             }
         }
 

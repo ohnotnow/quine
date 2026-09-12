@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ohffs\Quine\Symbols;
 
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Str;
 use Ohffs\Quine\Project;
 use Ohffs\Quine\Support\Bladestan;
 use PhpParser\Node;
@@ -30,8 +31,21 @@ use Throwable;
  */
 final class TemplateCollector implements Collector
 {
-    /** @var list<string> */
+    /**
+     * The templates Bladestan could not compile, by project-relative path
+     * (the view name when it resolves to no file), with the error's first line.
+     *
+     * @var array<string, string>
+     */
     public array $failed = [];
+
+    /**
+     * The templates Bladestan compiled but could not run the view composers
+     * of, so the variables those add are untyped in the rows; same keys.
+     *
+     * @var array<string, string>
+     */
+    public array $partial = [];
 
     /**
      * @param  list<string>  $viewRoots  Every directory a template path can be relative to, longest first.
@@ -60,12 +74,22 @@ final class TemplateCollector implements Collector
         foreach ($this->bladestan->viewCalls($this->phpstan, $node, $scope) as ['name' => $name, 'parameters' => $parameters]) {
             try {
                 $rows = [...$rows, ...$this->rowsOf($name, $parameters)];
-            } catch (Throwable) {
-                $this->failed[] = $name;
+            } catch (Throwable $e) {
+                $this->failed[$this->relativeName($name)] = Str::before($e->getMessage(), "\n");
             }
         }
 
         return $rows === [] ? null : $rows;
+    }
+
+    /**
+     * The project-relative path of a view, or the view name when it resolves to no file.
+     */
+    private function relativeName(string $name): string
+    {
+        $path = $this->bladestan->pathOf($this->phpstan, $name);
+
+        return $path === null ? $name : $this->project->relative($path);
     }
 
     /**
@@ -78,6 +102,19 @@ final class TemplateCollector implements Collector
 
         if ($compiled === null) {
             return [];
+        }
+
+        // Bladestan recovers from a syntax error by dropping the template's body and noting it;
+        // rows from what is left would be a partial picture presented as the whole. Any other
+        // note (a composer it could not call, a missing include) leaves the body readable.
+        foreach ($compiled['errors'] as [$message, $identifier]) {
+            if ($identifier === 'bladestan.parsing') {
+                $this->failed[$this->relativeName($name)] = $message;
+
+                return [];
+            }
+
+            $this->partial[$this->relativeName($name)] ??= Str::before($message, ', called in ');
         }
 
         $types = array_map(fn (Type $type) => $type->describe(VerbosityLevel::typeOnly()), $parameters);

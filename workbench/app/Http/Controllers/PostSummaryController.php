@@ -24,4 +24,14 @@ class PostSummaryController
     {
         return (new PostCache)->title($post);
     }
+
+    public function broken(Post $post)
+    {
+        return view('posts.broken', ['post' => $post]);
+    }
+
+    public function composed(Post $post)
+    {
+        return view('posts.composed', ['post' => $post]);
+    }
 }
