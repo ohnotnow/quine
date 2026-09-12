@@ -22,6 +22,8 @@ Requires PHP 8.3+ and Laravel 12+. Quine pulls in larastan, PHPStan and Pest v5 
 
 For Best Results(TM), give your relation methods the larastan generics (`/** @return BelongsTo<Author, $this> */`). Without them larastan types `$post->author` as a bare `Model`, and quine can only tell you "something over there reads a relation" rather than which one. If you would rather not do that by hand, there is a [Claude skill for working through it](https://github.com/ohnotnow/agentic-stuff/tree/master/skills/larastan).
 
+As of now (2026-09-12) bladestan needs [blaze](https://github.com/livewire/blaze) if you are using [livewire flux](https://fluxui.dev/) if you want templates more thoroughly scanned due to some issues with bladestan.
+
 ```bash
 vendor/bin/pest --tia
 php artisan quine:update
