@@ -67,6 +67,39 @@ it('nudges for a model edit in or beside the relation method, or naming its colu
         ->and($fromNode)->not->toBeEmpty();
 });
 
+it('stays silent for a model edit in the method above the relation, even when context lines show the relation declaration', function () {
+    $model = 'workbench/app/Models/Comment.php';
+    $diff = "--- a/$model\n+++ b/$model\n@@ -19,7 +19,7 @@ protected static function newFactory(): CommentFactory\n     protected static function newFactory(): CommentFactory\n     {\n-        return CommentFactory::new();\n+        return CommentFactory::new()->count(1);\n     }\n \n     /** @return BelongsTo<Author, \$this> */\n     public function author(): BelongsTo\n";
+
+    expect(app(NullableBelongsTo::class)->nudges(Change::forFile($model, $diff), updatedGraph()))->toBe([]);
+});
+
+it('nudges for a template edit that reads through a nullable relation, from the file as it now is', function () {
+    $template = 'workbench/resources/views/posts/comments.blade.php';
+    $diff = "--- a/$template\n+++ b/$template\n@@ -4,1 +4,1 @@\n-            <strong>{{ \$comment->author->name }}</strong>\n+            <strong>{{ \$comment->author->name }}!</strong>\n";
+
+    expect(array_map('strval', app(NullableBelongsTo::class)->nudges(Change::forFile($template, $diff), updatedGraph())))->toBe([
+        'workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)',
+        'workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path',
+    ]);
+});
+
+it('stays silent for a template edit that does not read through the nullable relation', function () {
+    $template = 'workbench/resources/views/posts/comments.blade.php';
+    $diff = "--- a/$template\n+++ b/$template\n@@ -6,1 +6,1 @@\n-            <p>{{ \$comment->excerpt }}</p>\n+            <p>{{ \$comment->excerpt }}.</p>\n";
+
+    expect(app(NullableBelongsTo::class)->nudges(Change::forFile($template, $diff), updatedGraph()))->toBe([]);
+});
+
 it('stays silent for a file that is neither a migration nor a model', function () {
     expect(app(NullableBelongsTo::class)->nudges(Change::forFile('workbench/app/Http/Controllers/PostController.php', ''), updatedGraph()))->toBe([]);
+});
+
+it('reports a PHP read only where PHPStan saw the receiver still nullable: not inside a guard, not on an untyped variable', function () {
+    $nudges = array_map('strval', app(NullableBelongsTo::class)->nudges(Change::forNode(Comment::class), updatedGraph()));
+
+    expect(implode("\n", $nudges))
+        ->toContain('workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety')
+        ->not->toContain('workbench/app/Support/PostCache.php:36')
+        ->not->toContain('workbench/app/Support/PostCache.php:45');
 });

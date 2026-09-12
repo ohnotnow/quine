@@ -39,3 +39,22 @@ it('names the methods whose declaration a hunk header carries, as the edited met
         ->and(Change::forFile('workbench/app/Models/Post.php', "@@ -1,1 +1,1 @@\n-a\n+b\n")->editedMethods())->toBe([])
         ->and(Change::forFile('workbench/app/Models/Post.php', "-a\n+b\n")->editedMethods())->toBe([]);
 });
+
+it('gives each changed line to the nearest declaration above it, never to one that is only trailing context', function () {
+    $change = Change::forFile('app/Models/Service.php', implode("\n", [
+        '@@ -20,7 +20,7 @@ public function users(): BelongsToMany',
+        '     {',
+        '-        return null;',
+        '+        return $this->belongsToMany(User::class);',
+        '     }',
+        ' ',
+        '     public function manager(): BelongsTo',
+        '     {',
+        '@@ -40,3 +40,3 @@',
+        '     public function report(): string',
+        '-        return "a";',
+        '+        return "b";',
+    ])."\n");
+
+    expect($change->touchedMethods())->toBe(['users', 'report']);
+});

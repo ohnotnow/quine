@@ -183,6 +183,42 @@ final readonly class Change
     }
 
     /**
+     * The methods whose bodies the changed lines sit in: each changed line
+     * belongs to the nearest declaration above it in its hunk, the hunk
+     * header's included. A declaration that only appears as trailing
+     * context governs nothing; the method above is being edited, not it.
+     *
+     * @return list<string>
+     */
+    public function touchedMethods(): array
+    {
+        $touched = [];
+        $governing = null;
+
+        foreach (preg_split('/\R/', $this->diff ?? '') ?: [] as $line) {
+            if (preg_match('/^@@ [^@]*@@ ?(.*)$/', $line, $match) === 1) {
+                $governing = preg_match(self::DECLARATION, $match[1], $declared) === 1 ? $declared[1] : null;
+
+                continue;
+            }
+
+            if ($line === '' || str_starts_with($line, '+++') || str_starts_with($line, '---') || ! in_array($line[0], [' ', '+', '-'], true)) {
+                continue;
+            }
+
+            if (preg_match(self::DECLARATION, substr($line, 1), $declared) === 1) {
+                $governing = $declared[1];
+            }
+
+            if ($line[0] !== ' ' && $governing !== null) {
+                $touched[$governing] = true;
+            }
+        }
+
+        return array_keys($touched);
+    }
+
+    /**
      * Method name to its trimmed declaration line, for every declaration in the lines.
      *
      * @param  list<string>  $lines

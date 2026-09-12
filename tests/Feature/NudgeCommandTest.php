@@ -370,7 +370,7 @@ it('names the template lines that read a removed relation', function () {
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Comment.php']);
 
-    expect(Artisan::output())->toContain("\nComment::author() removed; called from workbench/app/Support/PostCache.php:28, workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5\n");
+    expect(Artisan::output())->toContain("\nComment::author() removed; called from workbench/app/Support/PostCache.php:28, workbench/app/Support/PostCache.php:35, workbench/app/Support/PostCache.php:36, workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5\n");
 });
 
 it('falls back to the name match when the graph has no symbol edges for the class', function () {

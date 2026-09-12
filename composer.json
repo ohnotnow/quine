@@ -17,11 +17,12 @@
         }
     ],
     "require": {
-        "php": "^8.3",
+        "php": "^8.4",
         "illuminate/support": "^12.0||^13.0",
         "larastan/larastan": "^3.9",
         "pestphp/pest": "^5.0",
-        "phpstan/phpstan": "^2.2"
+        "phpstan/phpstan": "^2.2",
+        "sebastian/diff": "^9.0"
     },
     "require-dev": {
         "laravel/pao": "^1.0",

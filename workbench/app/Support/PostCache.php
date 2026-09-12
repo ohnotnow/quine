@@ -29,4 +29,19 @@ class PostCache
             $comment->body,
         );
     }
+
+    public function authorName(Comment $comment): ?string
+    {
+        if ($comment->author) {
+            return $comment->author->name;
+        }
+
+        return null;
+    }
+
+    /** Untyped on purpose: PHPStan cannot say what $comment is here. */
+    public function authorNameOf($comment): ?string
+    {
+        return $comment->author->name;
+    }
 }

@@ -20,7 +20,7 @@ use Symfony\Component\Finder\SplFileInfo;
  * A belongsTo whose foreign key is nullable: who still dereferences it as if
  * it were always set, and does any fixture ever produce the null state?
  *
- * @phpstan-type Target array{class: string, model: string, relation: string, table: string, column: string, file: string, nullable: ?bool}
+ * @phpstan-type Target array{class: string, model: string, relation: string, related: string, table: string, column: string, file: string, nullable: ?bool}
  */
 final class NullableBelongsTo implements Recipe
 {
@@ -28,6 +28,10 @@ final class NullableBelongsTo implements Recipe
 
     public function nudges(Change $change, Graph $graph): array
     {
+        if ($change->path !== null && str_ends_with($change->path, '.blade.php')) {
+            return $this->templateNudges($change, $graph);
+        }
+
         $nudges = [];
 
         foreach ($this->targets($change, $graph) as $target) {
@@ -40,6 +44,54 @@ final class NullableBelongsTo implements Recipe
         }
 
         return $nudges;
+    }
+
+    /**
+     * A template edit that reads through a nullable relation: the unguarded
+     * reads in the template as it now is (the graph's copy predates the
+     * edit), and whether any fixture produces the null case. The migration
+     * line is left out; the template is where the hazard lands, not where
+     * it was made.
+     *
+     * @return list<Nudge>
+     */
+    private function templateNudges(Change $change, Graph $graph): array
+    {
+        $path = (string) $change->path;
+        $absolute = $this->project->absolute($path);
+        $contents = is_file($absolute) ? (string) file_get_contents($absolute) : '';
+        $nudges = [];
+
+        foreach ($this->templateTargets($change, $graph) as $target) {
+            $nudges = [...$nudges, ...array_column($this->regexReads($contents, $path, $target), 'nudge'), ...$this->fixtureGap($target)];
+        }
+
+        return $nudges;
+    }
+
+    /**
+     * The nullable belongsTo relations a template edit reads through: a
+     * changed line carries `$var->relation` with the variable named for the
+     * model.
+     *
+     * @return list<Target>
+     */
+    private function templateTargets(Change $change, Graph $graph): array
+    {
+        $changed = implode("\n", [...$change->addedLines(), ...$change->removedLines()]);
+        $targets = [];
+
+        foreach ($this->nullableRelations($graph, array_keys($graph->models)) as $target) {
+            foreach (Matches::in('/\$(\w+)\??->'.preg_quote($target['relation'], '/').'\b/', $changed) as [$variable]) {
+                if ($this->variableMatches($variable, $target, null)) {
+                    $targets[] = $target;
+
+                    break;
+                }
+            }
+        }
+
+        return $targets;
     }
 
     /**
@@ -76,16 +128,20 @@ final class NullableBelongsTo implements Recipe
     }
 
     /**
-     * Whether an edit to the model is about this relation: its method or its
-     * column appears in or beside the changed lines. Any other edit to the
-     * file is not about the nullable key, and saying so every time would be
-     * wallpaper.
+     * Whether an edit to the model is about this relation: the changed lines
+     * sit in its method, or name its method or its column. An edit to the
+     * method above, whose trailing context happens to show the relation's
+     * declaration, is not about it; saying so every time would be wallpaper.
      *
      * @param  Target  $target
      */
     private function diffMentions(Change $change, array $target): bool
     {
-        foreach ($change->nearbyLines() as $line) {
+        if (in_array($target['relation'], $change->touchedMethods(), true)) {
+            return true;
+        }
+
+        foreach ([...$change->addedLines(), ...$change->removedLines()] as $line) {
             if (str_contains($line, $target['relation'].'(') || str_contains($line, $target['column'])) {
                 return true;
             }
@@ -182,6 +238,7 @@ final class NullableBelongsTo implements Recipe
                 'class' => $class,
                 'model' => class_basename($class),
                 'relation' => (string) $name,
+                'related' => is_string($relation['related'] ?? null) ? $relation['related'] : '',
                 'table' => Str::before($foreignKey, '.'),
                 'column' => Str::after($foreignKey, '.'),
                 'file' => $file,
@@ -222,7 +279,8 @@ final class NullableBelongsTo implements Recipe
     /**
      * Every place that reads through the relation without null-safety: the
      * unguarded reads edges from the templates, plus the same chain in PHP
-     * under the app directory. Variables are matched by name, a heuristic.
+     * under the app directory where PHPStan saw the receiver still nullable.
+     * Variables are matched by name, a heuristic.
      *
      * @param  Target  $target
      * @return list<Nudge>
@@ -247,18 +305,62 @@ final class NullableBelongsTo implements Recipe
             $sites[(string) $nudge] = $nudge;
         }
 
-        foreach (AppFiles::under($this->project) as ['file' => $file, 'path' => $path]) {
-            foreach (Matches::in('/(\$(\w+)->'.$relation.'->\w+)/', $file->getContents()) as [$chain, $line, $variable]) {
-                if (! $this->variableMatches((string) $variable, $target, $path)) {
-                    continue;
-                }
+        $unguarded = $this->unguardedFetches($graph);
 
-                $nudge = new Nudge($path, $line, $this->unguardedReason($chain, $target));
-                $sites[(string) $nudge] = $nudge;
+        foreach (AppFiles::under($this->project) as ['file' => $file, 'path' => $path]) {
+            foreach ($this->regexReads($file->getContents(), $path, $target) as ['nudge' => $nudge, 'property' => $property]) {
+                if (in_array("{$target['related']}::$property", $unguarded["$path:{$nudge->line}"] ?? [], true)) {
+                    $sites[(string) $nudge] = $nudge;
+                }
             }
         }
 
         return array_values($sites);
+    }
+
+    /**
+     * Every `$var->relation->x` chain in the text, the variable named for
+     * the model, as a nudge plus the property read, one per site. Text
+     * only: the caller decides what else has to be true of a site.
+     *
+     * @param  Target  $target
+     * @return list<array{nudge: Nudge, property: string}>
+     */
+    private function regexReads(string $contents, string $path, array $target): array
+    {
+        $sites = [];
+
+        foreach (Matches::in('/(\$(\w+)->'.preg_quote($target['relation'], '/').'->(\w+))/', $contents) as [$chain, $line, $variable]) {
+            if ($this->variableMatches((string) $variable, $target, $path)) {
+                $nudge = new Nudge($path, $line, $this->unguardedReason($chain, $target));
+                $sites[(string) $nudge] = ['nudge' => $nudge, 'property' => Str::afterLast($chain, '->')];
+            }
+        }
+
+        return array_values($sites);
+    }
+
+    /**
+     * The members (`Class::property`) PHPStan saw fetched through a receiver
+     * that could still be null, by site. The symbol index labels a fetch
+     * `(unguarded)` only then: a plain `fetches x` means an enclosing guard
+     * the regex cannot see, and no edge at all means PHPStan could not type
+     * the receiver. The recipe speaks only when the index is sure; a wrong
+     * line costs more trust than a missed one (decided 2026-09-12).
+     *
+     * @return array<string, list<string>>
+     */
+    private function unguardedFetches(Graph $graph): array
+    {
+        $unguarded = [];
+
+        foreach ($graph->edges as $edge) {
+            if ($edge['kind'] === 'fetches' && $edge['at'] !== null && str_contains($edge['label'], '(unguarded')) {
+                $unguarded[$edge['at']][] = $edge['to'];
+            }
+        }
+
+        return $unguarded;
     }
 
     /**
