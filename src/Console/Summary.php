@@ -72,7 +72,7 @@ final class Summary
     public function hiddenEdges(): void
     {
         $this->command->newLine();
-        $this->components->twoColumnDetail('<fg=yellow>HIDDEN EDGES</>', 'events, gates, policies, schedule');
+        $this->components->twoColumnDetail('<fg=yellow>RUNS WITHOUT BEING CALLED</>', 'events, gates, policies, schedule');
 
         foreach ($this->graph->edges as $edge) {
             if (in_array($edge['kind'], ['event', 'gate', 'policy', 'schedule'], true) && ! str_ends_with($edge['from'], '.blade.php')) {
@@ -84,7 +84,7 @@ final class Summary
     public function pages(): void
     {
         $this->command->newLine();
-        $this->components->twoColumnDetail('<fg=yellow>PAGES</>', 'route -> handler -> view (tests rendering it)');
+        $this->components->twoColumnDetail('<fg=yellow>ROUTES</>', 'route, handler, template (tests rendering it)');
         $this->coverageState();
 
         foreach ($this->graph->edges as $route) {
@@ -138,7 +138,7 @@ final class Summary
     public function nudges(Registry $recipes): void
     {
         $this->command->newLine();
-        $this->components->twoColumnDetail('<fg=yellow>NUDGES</>', 'what to check before you edit');
+        $this->components->twoColumnDetail('<fg=yellow>CHECK BEFORE EDITING</>', 'what the recipes found');
         $printed = false;
 
         foreach (array_keys($this->graph->models) as $class) {
@@ -175,6 +175,15 @@ final class Summary
     /**
      * Why the coverage overlay cannot be trusted right now, or null when it can.
      */
+    /**
+     * Whether test files exist that the coverage data has never seen. While
+     * that is so, "no test covers X" is not a fact, only a gap in the data.
+     */
+    public static function coverageBehind(Graph $graph): bool
+    {
+        return array_filter(is_array($graph->meta['coverage_missing_tests'] ?? null) ? $graph->meta['coverage_missing_tests'] : [], 'is_string') !== [];
+    }
+
     public static function coverageWarning(Graph $graph): ?string
     {
         if (($graph->meta['coverage'] ?? 'unavailable') === 'unavailable') {
@@ -184,7 +193,9 @@ final class Summary
         $missing = array_values(array_filter(is_array($graph->meta['coverage_missing_tests'] ?? null) ? $graph->meta['coverage_missing_tests'] : [], 'is_string'));
 
         if ($missing !== []) {
-            return 'tia cache is stale: '.count($missing).' test files are not in it ('.implode(', ', array_map('basename', $missing)).'): re-run vendor/bin/pest --tia';
+            $count = count($missing);
+
+            return "coverage data predates $count test file".($count === 1 ? '' : 's').' ('.implode(', ', array_map('basename', $missing)).'): vendor/bin/pest --tia refreshes it, one normal suite run, then only the tests your change touches';
         }
 
         return null;

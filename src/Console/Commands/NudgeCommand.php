@@ -17,6 +17,7 @@ use Ohffs\Quine\GraphBuilder;
 use Ohffs\Quine\Nudger;
 use Ohffs\Quine\Project;
 use Ohffs\Quine\Reach;
+use Ohffs\Quine\Rebuild;
 use Ohffs\Quine\Session;
 use Ohffs\Quine\SnapshotDiffer;
 use Symfony\Component\Console\Input\StreamableInputInterface;
@@ -39,9 +40,9 @@ class NudgeCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Print what one edited file reaches, from the saved graph; builds the graph only when there is none.';
+    protected $description = 'Say what an edit touches and what checking it costs, from the saved graph; builds the graph only when there is none.';
 
-    public function handle(GraphBuilder $builder, Project $project, Nudger $nudger, Differ $differ): int
+    public function handle(GraphBuilder $builder, Project $project, Nudger $nudger, Differ $differ, Rebuild $rebuild): int
     {
         try {
             $session = $this->option('session');
@@ -56,7 +57,7 @@ class NudgeCommand extends Command
                     $this->error('quine: --session scans the tree; the file argument is ignored');
                 }
 
-                return $this->scan(new Session($project, $session), $builder, $project, $nudger);
+                return $this->scan(new Session($project, $session), $builder, $project, $nudger, $rebuild);
             }
 
             if (! is_string($file)) {
@@ -75,11 +76,15 @@ class NudgeCommand extends Command
             $change = Change::forFile($path, ($this->editFromStdin($project) ?? $differ)->diff($path));
             $lines = $nudger->lines($change, $graph);
 
+            if ($stale) {
+                $rebuild->start();
+            }
+
             if ($lines === []) {
                 return self::SUCCESS;
             }
 
-            $this->print($lines, $stale);
+            $this->print($lines);
         } catch (Throwable $e) {
             $output = $this->output->getOutput();
             ($output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output)->writeln('quine: '.$e->getMessage());
@@ -90,12 +95,13 @@ class NudgeCommand extends Command
 
     /**
      * Every file under the watched paths touched since the session's marker
-     * and different from its snapshot gets a block, in path order; the stale
-     * line prints once after the last. The first run only plants the marker:
-     * nothing before it is this session's doing. Deletions are not seen (a
-     * deleted file is not there to be found) and are not nudged yet.
+     * and different from its snapshot gets a block, in path order. The first
+     * run only plants the marker: nothing before it is this session's doing.
+     * A file the graph has no node for, or a stale fingerprint, starts a
+     * rebuild in the background; nobody is asked to. Deletions are not seen
+     * (a deleted file is not there to be found) and are not nudged yet.
      */
-    private function scan(Session $session, GraphBuilder $builder, Project $project, Nudger $nudger): int
+    private function scan(Session $session, GraphBuilder $builder, Project $project, Nudger $nudger, Rebuild $rebuild): int
     {
         $start = time();
         $marker = $session->marker();
@@ -126,8 +132,7 @@ class NudgeCommand extends Command
         $reach = null;
         $stale = false;
         $printed = false;
-        $announced = $session->announced();
-        $unknown = [];
+        $unknown = false;
 
         foreach ($changed as $relative => $current) {
             $baseline = $session->snapshot($relative) ?? $this->headCopy($project, $relative);
@@ -148,29 +153,16 @@ class NudgeCommand extends Command
                     $this->line('');
                 }
 
-                $this->print($lines, false);
+                $this->print($lines);
                 $printed = true;
             }
 
-            if ($reach->knows($relative) === false && ! in_array($relative, $announced, true)) {
-                $unknown[] = $relative;
-            }
-
+            $unknown = $unknown || $reach->knows($relative) === false;
             $session->remember($relative, $current);
         }
 
-        // A file the graph has never seen gets no reach until quine:update runs; say so, once per file.
-        if ($unknown !== []) {
-            if ($printed) {
-                $this->line('');
-            }
-
-            $count = count($unknown);
-            $this->line('Quine: fyi. '.$count.' file'.($count === 1 ? '' : 's').' the graph does not know yet: '.implode(', ', $unknown));
-            $this->line('php artisan quine:update rebuilds the graph with '.($count === 1 ? 'it, so the next edit to it' : 'them, so the next edit to them').' gets its reach');
-            $session->announce($unknown);
-        } elseif ($printed && $stale) {
-            $this->stale();
+        if ($unknown || $stale) {
+            $rebuild->start();
         }
 
         $session->touch($start);
@@ -195,20 +187,11 @@ class NudgeCommand extends Command
     /**
      * @param  list<string>  $lines
      */
-    private function print(array $lines, bool $stale): void
+    private function print(array $lines): void
     {
         foreach ($lines as $line) {
             $this->line($line);
         }
-
-        if ($stale) {
-            $this->stale();
-        }
-    }
-
-    private function stale(): void
-    {
-        $this->line('graph is stale (the app changed after it was built): php artisan quine:update refreshes it');
     }
 
     /**

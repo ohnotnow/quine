@@ -32,8 +32,8 @@ class Nudger
             return [];
         }
 
-        // "hang on" is earned by a broken caller, somewhere the walk reached, a gap, a hidden edge or a recipe; the rest is for the record.
-        $opener = ($callers !== [] || $reach !== [] || $gaps !== [] || $hidden !== [] || $nudges !== [] ? 'Quine: hang on. ' : 'Quine: fyi. ').$change->path;
+        // One opener, no verdict word: two cold readers said "hang on" and "fyi" told them nothing. Each line carries its own weight.
+        $opener = "Quine, after your edit to {$change->path}:";
 
         return [$opener, ...$callers, ...$reach, ...$gaps, ...$hidden, ...$notes, ...$nudges];
     }

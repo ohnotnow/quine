@@ -8,6 +8,7 @@ use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Str;
 use Ohffs\Quine\Console\Summary;
 use Ohffs\Quine\Support\AppFiles;
+use Ohffs\Quine\Support\Describe;
 
 /**
  * What an edit to one file can reach, said the way a colleague would: the
@@ -55,12 +56,12 @@ final readonly class Reach
             'callers' => $template ? [] : $this->callers($node, $relativePath, $change),
             'reach' => $reach,
             'gaps' => [
-                ...array_map(fn (string $path) => "reaches $path: no test renders this", $untested),
+                ...array_map(fn (string $path) => "the template $path shows this, and no test renders it: check it in the browser or write one", $untested),
                 ...($coverageGap === null ? [] : [$coverageGap]),
             ],
             'hidden' => $template ? [] : $this->hiddenEdges($node, $relativePath, $change),
             'notes' => [
-                ...($tested === [] ? [] : ['templates reached: '.implode(', ', $tested).' (a test renders each; whether it exercises your change is yours to check)']),
+                ...($tested === [] ? [] : ['templates that show this: '.implode(', ', $tested).'. Each has a test that renders it; a test rendering a template is not a test of your change']),
                 ...$coverageNote,
             ],
         ];
@@ -131,7 +132,7 @@ final readonly class Reach
             }
 
             if ($endpoint['kind'] !== 'template') {
-                $lines[] = $this->endpointLine($endpoint);
+                $lines[] = $this->endpointLine($member, $endpoint);
 
                 continue;
             }
@@ -142,26 +143,26 @@ final readonly class Reach
         }
 
         foreach ($routes as $group) {
-            $lines[] = count($group) === 1 ? $this->endpointLine($group[0]) : $this->routesLine($group);
+            $lines[] = count($group) === 1 ? $this->endpointLine($member, $group[0]) : $this->routesLine($member, $group);
         }
 
         foreach ($byTrail as $trail => $reached) {
             $named = array_map(fn (array $endpoint) => "{$endpoint['at']} (".$this->templateCoverage($endpoint['node']).')', $reached);
-            $lines[] = 'reaches '.implode(', ', $named).' via '.implode(' -> ', array_map($this->short(...), explode(' -> ', $trail))).'; whether a test exercises your change is yours to check';
+            $lines[] = (count($named) === 1 ? 'the template ' : 'the templates ').implode(', ', $named).' show'.(count($named) === 1 ? 's' : '').' this'.$this->chain(explode(' -> ', $trail), null).'; a test rendering a template is not a test of your change';
         }
 
         // The cap is on printed lines, after routes and templates have shared theirs.
         if ($cap !== null && count($lines) > $cap) {
             $more = count($lines) - $cap;
-            $lines = [...array_slice($lines, 0, $cap), "and $more more: quine:ask ".$this->short($member).' lists them'];
+            $lines = [...array_slice($lines, 0, $cap), "and $more more; php artisan quine:ask ".$this->short($member).' lists them'];
         }
 
         foreach ($walk['frontiers'] as $frontier) {
-            $lines[] = 'reached '.$this->short($frontier).', nothing found that uses it';
+            $lines[] = $this->short($frontier).' uses this, and nothing quine can see uses that: a dead end, or a string-keyed call it cannot follow';
         }
 
         if ($walk['stopped']) {
-            $lines[] = "walk stopped at depth {$this->depth()} below ".$this->short($member).' (quine.reach.depth)';
+            $lines[] = 'stopped following '.$this->short($member)." after {$this->depth()} hop".($this->depth() === 1 ? '' : 's').'; php artisan quine:ask '.$this->short($member).' lists the rest';
         }
 
         return ['lines' => $lines, 'templates' => $templates];
@@ -298,33 +299,33 @@ final readonly class Reach
         }
 
         if ($this->graph->edgesTo($class, 'livewire') !== []) {
-            return 'Livewire component';
+            return 'a Livewire component';
         }
 
         if ($this->graph->edgesTo($class, 'component') !== []) {
-            return 'Blade component';
+            return 'a Blade component';
         }
 
         foreach ($this->graph->edgesFrom($class, 'renders') as $edge) {
-            return 'renders '.$edge['to'];
+            return 'which renders '.$edge['to'];
         }
 
         foreach ($this->graph->edges as $edge) {
             if ($edge['kind'] === 'event' && Str::before($edge['to'], '@') === $class) {
-                return $edge['label'];
+                return 'a '.$edge['label'];
             }
         }
 
         foreach ($this->graph->edgesTo($class, 'schedule') as $edge) {
-            return 'scheduled '.$edge['label'];
+            return 'runs on the schedule ('.$edge['label'].')';
         }
 
         return match (true) {
-            str_contains($class, '\\Jobs\\') => 'job, by namespace',
-            str_contains($class, '\\Mail\\') => 'mailable, by namespace',
-            str_contains($class, '\\Notifications\\') => 'notification, by namespace',
-            str_contains($class, '\\Mcp\\Servers\\') => 'MCP server, by namespace',
-            str_contains($class, '\\Mcp\\') => 'MCP tool, by namespace',
+            str_contains($class, '\\Jobs\\') => 'a job (going by its namespace)',
+            str_contains($class, '\\Mail\\') => 'a mailable (going by its namespace)',
+            str_contains($class, '\\Notifications\\') => 'a notification (going by its namespace)',
+            str_contains($class, '\\Mcp\\Servers\\') => 'an MCP server (going by its namespace)',
+            str_contains($class, '\\Mcp\\') => 'an MCP tool (going by its namespace)',
             default => null,
         };
     }
@@ -332,22 +333,43 @@ final readonly class Reach
     /**
      * @param  array{node: string, kind: string, trail: list<string>, at: string, coverage: string}  $endpoint
      */
-    private function endpointLine(array $endpoint): string
+    private function endpointLine(string $member, array $endpoint): string
     {
-        // The constructor bridge reads as what it is: the class being made, not a call to __construct.
-        $hops = array_map(
-            fn (string $hop) => str_ends_with($hop, '::__construct') ? 'new '.class_basename(Str::before($hop, '::')) : $this->short($hop),
-            [...$endpoint['trail'], $endpoint['node']],
-        );
-
         $what = match (true) {
-            str_starts_with($endpoint['kind'], 'route ') => $endpoint['kind'].' ('.$this->short($endpoint['node']).')',
+            str_starts_with($endpoint['kind'], 'route ') => 'the '.Str::after($endpoint['kind'], 'route ').' route, in '.$this->short($endpoint['node']),
             // A page route mounts the component; the method is a Livewire action on it, not what GET runs.
-            str_starts_with($endpoint['kind'], 'page ') => 'route '.Str::after($endpoint['kind'], 'page ').' ('.class_basename(Str::before($endpoint['node'], '::')).' component, '.Str::after($endpoint['node'], '::').')',
-            default => Str::before($endpoint['node'], '::').' ('.$endpoint['kind'].')',
+            str_starts_with($endpoint['kind'], 'page ') => 'the '.Str::after($endpoint['kind'], 'page GET|HEAD ').' page, in '.$this->short($endpoint['node']),
+            default => Str::before($endpoint['node'], '::').', '.$endpoint['kind'].', in '.$this->short($endpoint['node']),
         };
 
-        return "reaches $what via ".implode(' -> ', $hops)." (at {$endpoint['at']}); {$endpoint['coverage']}";
+        return $this->short($member)." is used at {$endpoint['at']}; that use ends up in $what".$this->chain($endpoint['trail'], $endpoint['node'])."; {$endpoint['coverage']}";
+    }
+
+    /**
+     * The call chain from where it ended up back down to the edited member,
+     * in call order, when there is at least one hop between: `; the call
+     * chain is C::d -> A::b -> Post::title`. A cold reader could not tell
+     * which way an unlabelled arrow pointed. The constructor bridge reads as
+     * the class being made, not a call to __construct.
+     *
+     * @param  list<string>  $trail  The edited member first, then each hop outward.
+     */
+    private function chain(array $trail, ?string $endpoint): string
+    {
+        if (count($trail) < 2) {
+            return '';
+        }
+
+        $hops = array_reverse($trail);
+
+        if ($endpoint !== null) {
+            array_unshift($hops, $endpoint);
+        }
+
+        return '; the call chain is '.implode(' -> ', array_map(
+            fn (string $hop) => str_ends_with($hop, '::__construct') ? 'new '.class_basename(Str::before($hop, '::')) : $this->short($hop),
+            $hops,
+        ));
     }
 
     /**
@@ -355,17 +377,14 @@ final readonly class Reach
      *
      * @param  non-empty-list<array{node: string, kind: string, trail: list<string>, at: string, coverage: string}>  $group
      */
-    private function routesLine(array $group): string
+    private function routesLine(string $member, array $group): string
     {
         $first = $group[0];
-        $hops = array_map(
-            fn (string $hop) => str_ends_with($hop, '::__construct') ? 'new '.class_basename(Str::before($hop, '::')) : $this->short($hop),
-            $first['trail'],
-        );
         $routes = implode(', ', array_map(fn (array $endpoint) => Str::after($endpoint['kind'], 'route '), $group));
-        $actions = implode(', ', array_map(fn (array $endpoint) => Str::after($endpoint['node'], '::'), $group));
+        $actions = array_map(fn (array $endpoint) => Str::after($endpoint['node'], '::'), $group);
+        $last = array_pop($actions);
 
-        return "reaches routes $routes (".class_basename(Str::before($first['node'], '::'))."::$actions) via ".implode(' -> ', $hops)." (at {$first['at']}); {$first['coverage']}";
+        return $this->short($member)." is used at {$first['at']}; that use ends up in the $routes routes, in ".class_basename(Str::before($first['node'], '::')).'::'.implode(', ', $actions)." and $last".$this->chain($first['trail'], $first['node'])."; {$first['coverage']}";
     }
 
     /**
@@ -404,7 +423,7 @@ final readonly class Reach
         $tests = $this->tests($path);
 
         if ($tests === []) {
-            return 'no test renders this';
+            return 'no test renders it';
         }
 
         $more = count($tests) - 3;
@@ -417,9 +436,9 @@ final readonly class Reach
         $tests = $this->tests($path);
 
         return match (count($tests)) {
-            0 => "no test covers $path",
-            1 => "1 test file covers $path: {$tests[0]}",
-            default => count($tests)." test files cover $path",
+            0 => Summary::coverageBehind($this->graph) ? "coverage data predates newer test files for $path" : "no test runs $path, by the coverage data",
+            1 => "{$tests[0]} runs $path",
+            default => count($tests)." test files run $path",
         };
     }
 
@@ -500,7 +519,8 @@ final readonly class Reach
 
         foreach ([['removed', $change->removedMethods()], ['signature changed', $change->changedMethods()]] as [$what, $methods]) {
             foreach ($methods as $method) {
-                $label = class_basename($node)."::$method() $what";
+                $label = class_basename($node).'::'.$method.'() '.($what === 'removed' ? 'is gone' : 'changed shape');
+                $consequence = $what === 'removed' ? ': those calls break' : ': check each call still fits';
 
                 // A static that became a scope still answers the old call through the query builder.
                 if ($what === 'removed' && in_array('scope'.ucfirst($method), $added, true)) {
@@ -512,9 +532,9 @@ final readonly class Reach
                     $found = $this->consumers($node, Str::after($this->memberNode($node, $method), "$node::"));
 
                     if ($found !== []) {
-                        $lines[] = "$label; called from ".implode(', ', $found);
+                        $lines[] = $label.($what === 'removed' ? ' but still called from ' : '; called from ').implode(', ', $found).$consequence;
                     } elseif ($what === 'removed') {
-                        $lines[] = "$label; no caller found";
+                        $lines[] = "$label and nothing quine can see called it";
                     }
 
                     continue;
@@ -523,9 +543,9 @@ final readonly class Reach
                 $found = $this->callSites($node, $relativePath, $method);
 
                 if ($found !== []) {
-                    $lines[] = "$label; called by name from ".implode(', ', $found).' (name match, heuristic)';
+                    $lines[] = $label.($what === 'removed' ? ' but still called from ' : '; called from ').implode(', ', $found).$consequence.' (matched by name, so check each is really this method)';
                 } elseif ($what === 'removed') {
-                    $lines[] = "$label; no caller found by name match";
+                    $lines[] = "$label and nothing called it by name";
                 }
             }
         }
@@ -642,13 +662,13 @@ final readonly class Reach
 
         foreach ($this->graph->edgesFrom($node, 'model-event') as $edge) {
             if (! str_starts_with($edge['to'], "closure $relativePath:") && ($change->mentions($edge['label']) || $change->mentions(class_basename(Str::before($edge['to'], '@'))))) {
-                $lines[] = "on {$edge['label']} -> {$edge['to']}";
+                $lines[] = $this->hiddenEventLine($node, $edge['label'], $edge['to']);
             }
         }
 
         foreach ($this->graph->edgesFrom($node, 'policy') as $edge) {
             if ($change->mentions(class_basename($edge['to']))) {
-                $lines[] = "policy -> {$edge['to']}";
+                $lines[] = "{$edge['to']} decides who may do this; it is not in this file";
             }
         }
 
@@ -656,12 +676,28 @@ final readonly class Reach
         foreach ($this->graph->edgesFrom($node, 'uses') as $reference) {
             foreach ($this->graph->edgesFrom($reference['to'], 'event') as $edge) {
                 if ($change->mentions(class_basename($edge['from'])) || $change->mentions('dispatch')) {
-                    $lines[] = "dispatches {$edge['from']} -> {$edge['to']} ({$edge['label']})";
+                    $lines[] = 'this dispatches '.class_basename($edge['from']).'; '.$this->short(str_replace('@', '::', $edge['to'])).' runs on it'.(str_contains($edge['label'], 'queued') ? ', queued, so later and outside the request' : '');
                 }
             }
         }
 
         return $lines;
+    }
+
+    /**
+     * `saving a Post also runs PostObserver::saving, registered in the observer, not in this file`,
+     * or the closure form when the hook is a closure in another file.
+     */
+    private function hiddenEventLine(string $node, string $event, string $target): string
+    {
+        $doing = str_ends_with($event, 'ing') ? $event : (str_ends_with($event, 'ed') ? substr($event, 0, -2).'ing' : $event);
+        $subject = "$doing ".Describe::withArticle(class_basename($node)).' also runs ';
+
+        if (str_starts_with($target, 'closure ')) {
+            return $subject.'the closure at '.Str::after($target, 'closure ');
+        }
+
+        return $subject.str_replace('@', '::', $target).', registered in the observer, not in this file';
     }
 
     /**
@@ -804,14 +840,17 @@ final readonly class Reach
         $note = $warning === null ? [] : [$warning];
 
         if ($count === 0) {
-            return ['gap' => 'no test covers this file', 'note' => $note];
+            // Coverage data that predates test files cannot say nobody runs this: the warning already says what to do.
+            return Summary::coverageBehind($this->graph)
+                ? ['gap' => null, 'note' => $note]
+                : ['gap' => "no test runs $relativePath, by the coverage data", 'note' => $note];
         }
 
         if ($count === 1) {
-            return ['gap' => null, 'note' => [...$note, "1 test file covers this file: {$tests[0]} (vendor/bin/pest --tia runs it)"]];
+            return ['gap' => null, 'note' => [...$note, "1 test file runs $relativePath, {$tests[0]}; vendor/bin/pest --tia runs just that"]];
         }
 
-        return ['gap' => null, 'note' => [...$note, "$count test files cover this file: vendor/bin/pest --tia runs them"]];
+        return ['gap' => null, 'note' => [...$note, "$count test files run $relativePath; vendor/bin/pest --tia runs just those, in seconds"]];
     }
 
     /**

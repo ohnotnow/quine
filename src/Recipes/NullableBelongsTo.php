@@ -268,7 +268,7 @@ final class NullableBelongsTo implements Recipe
 
             foreach (preg_split('/\R/', $contents) ?: [] as $index => $line) {
                 if (str_contains($line, "'{$target['column']}'") && str_contains($line, 'nullable')) {
-                    $nudges[] = new Nudge($this->project->relative($file->getPathname()), $index + 1, "{$target['model']}->{$target['relation']} can be null: ".trim($line));
+                    $nudges[] = new Nudge($this->project->relative($file->getPathname()), $index + 1, "{$target['model']}->{$target['relation']} can be null; the migration says so: ".trim($line));
                 }
             }
         }
@@ -380,7 +380,7 @@ final class NullableBelongsTo implements Recipe
      */
     private function unguardedReason(string $chain, array $target): string
     {
-        return "reads $chain without null-safety, but {$target['model']}->{$target['relation']} can be null (variable matched by name, heuristic)";
+        return "$chain breaks when {$target['relation']} is null, and it can be (the variable is matched to the model by name, so check it is ".Describe::withArticle($target['model']).')';
     }
 
     /**

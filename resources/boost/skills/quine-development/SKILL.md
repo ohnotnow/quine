@@ -38,9 +38,9 @@ php artisan quine:ask Post --full       # list the plain `use` references too
 php artisan quine:ask 'Post::author'    # consumers of one member; 'Post->author' is the same
 ```
 
-- read the NEIGHBOURHOOD block top to bottom: surprising kinds (relations, model events, policies, listeners, routes, rendered templates) come first, plain references are a count
+- read the AROUND IT block top to bottom: surprising kinds (relations, model events, policies, listeners, routes, rendered templates) come first, plain references are a count
 - the `fetched from` / `called from` lines say which members are consumed and by how many places; ask for the member to see each site with its file and line
-- NUDGES lists what the recipes want checked: a nullable foreign key, a template reading it without null-safety, whether any factory, seeder or test creates the null case, and a nullable column or relation that feeds a cache key, storage path, URL, config key or queue name
+- CHECK BEFORE EDITING lists what the recipes found: a nullable foreign key, a template reading it without null-safety, whether any factory, seeder or test creates the null case, and a nullable column or relation that feeds a cache key, storage path, URL, config key or queue name
 
 ### 3. Nudge after an edit
 
@@ -48,7 +48,7 @@ php artisan quine:ask 'Post::author'    # consumers of one member; 'Post->author
 php artisan quine:nudge app/Models/Post.php
 ```
 
-- prints `Quine: hang on.` when the edit reaches a gap or a hidden edge (a removed or changed method with callers, somewhere the walk from an edited method ends up such as a route, template, listener, job or MCP tool, a template no test renders, an observer or listener outside the file, a recipe finding), `Quine: fyi.` when it only reaches tested things, and nothing when the graph does not know the file
+- opens `Quine, after your edit to <file>:` and then one line per thing worth knowing: a removed or changed method and who still calls it, the route, page, template, listener, job or MCP tool your change is used by and what test runs that file, a template no test renders, an observer, policy or listener that runs outside this file, a recipe finding; nothing when there is nothing to say. Every line says what it costs to check and where quine is guessing
 - the callers line names every resolved consumer of a removed or changed method, templates on their own line; treat it as the checklist
 - `--edit` reads `{"old": ..., "new": ...}` from stdin to judge one edit rather than the working-tree diff, for replaying an edit by hand; `--session=<id>` nudges every file changed since that session last asked, which is what the hook uses
 
@@ -75,7 +75,7 @@ Add to `~/.claude/settings.json` or the app's `.claude/settings.local.json`:
 ```
 
 - the hook runs `quine:nudge --session=<session id>` after any tool that can change files, Bash included, and returns the output as additional context; it is silent when quine has nothing to say
-- it rebuilds the graph first when the app's shape changed since the last build (about a second on a small app)
+- when the app has changed shape or gained files since the last build, it starts `quine:update` in the background and the next edit answers from the fresh graph
 
 ### 5. Configure only when the defaults are wrong
 

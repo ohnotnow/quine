@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace Ohffs\Quine\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Filesystem\Filesystem;
 use Ohffs\Quine\Console\Summary;
+use Ohffs\Quine\Graph;
 use Ohffs\Quine\GraphBuilder;
 use Ohffs\Quine\Project;
+use Ohffs\Quine\Rebuild;
 use Ohffs\Quine\Recipes\Registry;
 
 class UpdateCommand extends Command
@@ -30,6 +33,7 @@ class UpdateCommand extends Command
         $path = $project->absolute(is_string($json) && $json !== '' ? $json : $project->graphPath);
 
         $graph->save($path);
+        (new Filesystem)->delete((new Rebuild($project))->lockPath());
 
         if ($this->output->isQuiet()) {
             return self::SUCCESS;
@@ -44,6 +48,26 @@ class UpdateCommand extends Command
         $this->newLine();
         $this->info(count($graph->edges).' edges written to '.$project->relative($path));
 
+        if ($this->output->isVerbose()) {
+            $this->timings($graph);
+        }
+
         return self::SUCCESS;
+    }
+
+    /**
+     * How long each source took, slowest first, then the total: the numbers
+     * a decision about building in parallel has to rest on.
+     */
+    private function timings(Graph $graph): void
+    {
+        $timings = is_array($graph->meta['timings'] ?? null) ? array_filter($graph->meta['timings'], 'is_float') : [];
+        arsort($timings);
+
+        $this->newLine();
+        $this->table(['source', 'seconds'], [
+            ...array_map(fn (string $source, float $seconds) => [$source, number_format($seconds, 2)], array_keys($timings), $timings),
+            ['total', number_format(is_float($graph->meta['built_in'] ?? null) ? $graph->meta['built_in'] : 0.0, 2)],
+        ]);
     }
 }

@@ -75,7 +75,7 @@ it('says so when quine:nudge runs out of time, instead of staying silent', funct
     $decoded = json_decode((string) $json, true);
 
     expect($decoded['hookSpecificOutput']['additionalContext'])
-        ->toBe('Quine: gave up after 20s waiting for quine:nudge (a first run builds the whole graph). Run php artisan quine:update once by hand; after that an edit answers in well under a second.');
+        ->toBe('Quine had nothing in 20s: the first run in an app builds its index. Run php artisan quine:update once (about 20s on a mid-sized app, read-only apart from storage/app/quine); every edit after that answers in under a second.');
 });
 
 it('does nothing for a file with no Laravel root above it', function () {

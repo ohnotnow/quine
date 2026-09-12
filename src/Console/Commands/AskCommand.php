@@ -48,13 +48,13 @@ class AskCommand extends Command
         // A member node (Class::member) has only inbound edges: who consumes it.
         $member = str_contains($node, '::');
 
-        $this->components->twoColumnDetail($member ? '<fg=yellow>CONSUMERS</>' : '<fg=yellow>NEIGHBOURHOOD</>', $node);
+        $this->components->twoColumnDetail($member ? '<fg=yellow>USED BY</>' : '<fg=yellow>AROUND IT</>', $node);
         $this->walk($node, $graph, $member ? 1 : max(1, (int) $this->option('depth')));
 
         // Where the member's consumers lead, member to member, to something the outside world touches.
         if ($member) {
             $this->newLine();
-            $this->components->twoColumnDetail('<fg=yellow>REACHES</>', 'where it ends up');
+            $this->components->twoColumnDetail('<fg=yellow>WHERE IT ENDS UP</>', 'member to member, to something the outside world touches');
 
             foreach ((new Reach($graph, $project))->reachLines($node)['lines'] as $line) {
                 $this->line("    $line");
@@ -62,7 +62,7 @@ class AskCommand extends Command
         }
 
         $this->newLine();
-        $this->components->twoColumnDetail('<fg=yellow>NUDGES</>', 'what to check before you edit');
+        $this->components->twoColumnDetail('<fg=yellow>CHECK BEFORE EDITING</>', 'what the recipes found');
 
         $nudges = [];
 

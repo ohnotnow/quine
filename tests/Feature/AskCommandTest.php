@@ -24,8 +24,8 @@ it('prints the recipe nudges for the node under NUDGES', function () {
     $this->artisan('quine:update')->assertSuccessful();
 
     $this->artisan('quine:ask', ['node' => Comment::class])
-        ->expectsOutputToContain('NUDGES')
-        ->expectsOutputToContain('workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety')
+        ->expectsOutputToContain('CHECK BEFORE EDITING')
+        ->expectsOutputToContain('workbench/resources/views/posts/comments.blade.php:4  $comment->author->name breaks when author is null')
         ->expectsOutputToContain('no factory, seeder or test ever creates a Comment with a null author')
         ->assertSuccessful();
 });
@@ -116,13 +116,13 @@ it('prints the consumers of one member when asked for Class::member', function (
     Artisan::call('quine:ask', ['node' => 'Post::isPublished']);
     $output = Artisan::output();
 
-    expect($output)->toContain('CONSUMERS')
+    expect($output)->toContain('USED BY')
         ->and($output)->toContain(Post::class.'::isPublished')
         ->and($output)->toContain('<- [calls: calls isPublished()] Workbench\App\Http\Controllers\PostController::show  workbench/app/Http/Controllers/PostController.php:12')
-        ->and($output)->toContain('REACHES')
-        ->and($output)->toContain('    reaches route GET|HEAD /posts/{post}/summary (PostSummaryController::show) via Post::isPublished -> PostSummary::line -> PostSummaryController::show (at workbench/app/Support/PostSummary.php:14); no test covers workbench/app/Http/Controllers/PostSummaryController.php')
-        ->and($output)->toContain('    reached PostDigest::digest, nothing found that uses it')
-        ->and($output)->not->toContain('NEIGHBOURHOOD');
+        ->and($output)->toContain('WHERE IT ENDS UP')
+        ->and($output)->toContain('    Post::isPublished is used at workbench/app/Support/PostSummary.php:14; that use ends up in the GET|HEAD /posts/{post}/summary route, in PostSummaryController::show; the call chain is PostSummaryController::show -> PostSummary::line -> Post::isPublished; coverage data predates newer test files for workbench/app/Http/Controllers/PostSummaryController.php')
+        ->and($output)->toContain('    PostDigest::digest uses this, and nothing quine can see uses that: a dead end, or a string-keyed call it cannot follow')
+        ->and($output)->not->toContain('AROUND IT');
 });
 
 it('shows the sink a fetched member feeds in the consumer line', function () {
@@ -139,7 +139,7 @@ it('accepts the arrow form for a property and lists the template that reads it',
 
     Artisan::call('quine:ask', ['node' => 'Comment->author']);
 
-    expect(Artisan::output())->toContain('CONSUMERS')
+    expect(Artisan::output())->toContain('USED BY')
         ->toContain('<- [fetches: fetches author] workbench/resources/views/posts/comments.blade.php  workbench/resources/views/posts/comments.blade.php:4');
 });
 

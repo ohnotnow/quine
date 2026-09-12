@@ -108,7 +108,9 @@ final class Graph
         $files = new Filesystem;
 
         $files->ensureDirectoryExists(dirname($path));
-        $files->put($path, json_encode($this->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        // Written beside, then renamed: a nudge reading the graph mid-build gets the old one whole, never half of the new one.
+        $files->put("$path.tmp", json_encode($this->toArray(), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        $files->move("$path.tmp", $path);
     }
 
     public static function load(string $path): self

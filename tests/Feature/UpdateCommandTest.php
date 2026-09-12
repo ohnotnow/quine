@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\File;
 use Ohffs\Quine\Graph;
 use Workbench\App\Events\PostPublished;
 use Workbench\App\Listeners\NotifyEditors;
@@ -37,14 +38,14 @@ it('ends with a human summary of models and nudges', function () {
         ->expectsOutputToContain('on created -> closure workbench/app/Models/Post.php:28')
         ->expectsOutputToContain('accessors: excerpt')
         ->expectsOutputToContain('casts: id=int')
-        ->expectsOutputToContain('NUDGES')
+        ->expectsOutputToContain('CHECK BEFORE EDITING')
         ->expectsOutputToContain('Comment->author can be null')
         ->assertSuccessful();
 });
 
 it('lists the hidden edges: events, gates, policies and the schedule', function () {
     $this->artisan('quine:update')
-        ->expectsOutputToContain('HIDDEN EDGES')
+        ->expectsOutputToContain('RUNS WITHOUT BEING CALLED')
         ->expectsOutputToContain(PostPublished::class.' --queued listener--> '.NotifyEditors::class.'@handle')
         ->expectsOutputToContain('schedule --0 0 * * *--> inspire')
         ->assertSuccessful();
@@ -52,8 +53,8 @@ it('lists the hidden edges: events, gates, policies and the schedule', function 
 
 it('reports the coverage state and how many test files render each page', function () {
     $this->artisan('quine:update')
-        ->expectsOutputToContain('PAGES')
-        ->expectsOutputToContain('tia cache is stale: 1 test files are not in it (CommentPageTest.php)')
+        ->expectsOutputToContain('ROUTES')
+        ->expectsOutputToContain('coverage data predates 1 test file (CommentPageTest.php)')
         ->expectsOutputToContain('workbench/resources/views/posts/show.blade.php  (1 test files)')
         ->assertSuccessful();
 });
@@ -93,4 +94,31 @@ it('still indexes PHP members and says so when bladestan is not installed', func
 
     expect($graph->edgesTo('Workbench\App\Models\Post::isPublished'))->not->toBeEmpty()
         ->and($graph->edgesFrom('workbench/resources/views/posts/show.blade.php', 'fetches'))->toBe([]);
+});
+
+it('clears the background rebuild lock when it finishes', function () {
+    $lock = dirname(config()->string('quine.graph_path')).'/update.lock';
+    File::ensureDirectoryExists(dirname($lock));
+    File::put($lock, '{"pid":0,"started":0}');
+
+    $this->artisan('quine:update', ['--quiet' => true])->assertSuccessful();
+
+    expect(File::exists($lock))->toBeFalse();
+});
+
+it('records how long each source took, and the total, in the graph meta', function () {
+    $this->artisan('quine:update', ['--quiet' => true])->assertSuccessful();
+
+    $meta = Graph::load(config()->string('quine.graph_path'))->meta;
+
+    expect($meta['timings'])->toHaveCount(12)
+        ->and($meta['timings'])->toHaveKeys(['SchemaSource', 'ModelsSource', 'SymbolsSource', 'BladeSource', 'CoverageSource'])
+        ->and($meta['built_in'])->toBeFloat();
+});
+
+it('prints the per-source timings slowest first when asked for verbose output', function () {
+    $this->artisan('quine:update', ['-v' => true])
+        ->expectsOutputToContain('SymbolsSource')
+        ->expectsOutputToContain('total')
+        ->assertSuccessful();
 });

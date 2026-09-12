@@ -7,6 +7,8 @@ use Illuminate\Support\Facades\File;
 use Ohffs\Quine\Change;
 use Ohffs\Quine\Graph;
 use Ohffs\Quine\Nudger;
+use Ohffs\Quine\Project;
+use Ohffs\Quine\Rebuild;
 
 /**
  * Records every Change the command hands it and answers with one line per file.
@@ -22,7 +24,7 @@ final class FakeNudger extends Nudger
     {
         $this->changes[] = $change;
 
-        return ['Quine: fyi. '.$change->path];
+        return ["Quine, after your edit to {$change->path}:"];
     }
 }
 
@@ -43,6 +45,12 @@ beforeEach(function () {
 
     $this->nudger = new FakeNudger;
     app()->instance(Nudger::class, $this->nudger);
+    $this->rebuilds = 0;
+    app()->instance(Rebuild::class, new Rebuild(app(Project::class), function (): int {
+        $this->rebuilds++;
+
+        return 1;
+    }));
     $this->marker = "$this->root/storage/quine/sessions/sess-1/marker";
     $this->write = function (string $relative, string $content): void {
         File::put("$this->root/$relative", $content);
@@ -68,12 +76,8 @@ it('nudges a file written since the marker, with the whole file as the change wh
 
     Artisan::call('quine:nudge', ['--session' => 'sess-1']);
 
-    expect(Artisan::output())->toBe(implode("\n", [
-        'Quine: fyi. app/Models/Thing.php',
-        '',
-        'Quine: fyi. 1 file the graph does not know yet: app/Models/Thing.php',
-        'php artisan quine:update rebuilds the graph with it, so the next edit to it gets its reach',
-    ])."\n")
+    expect(Artisan::output())->toBe("Quine, after your edit to app/Models/Thing.php:\n")
+        ->and($this->rebuilds)->toBe(1)
         ->and($this->nudger->changes)->toHaveCount(1)
         ->and($this->nudger->changes[0]->path)->toBe('app/Models/Thing.php')
         ->and($this->nudger->changes[0]->addedLines())->toBe(['<?php', '', 'class Thing', '{', '}']);
@@ -104,7 +108,7 @@ it('diffs a second change against the snapshot, not against the first', function
         ->and($this->nudger->changes[1]->removedLines())->toBe([]);
 });
 
-it('prints one block per changed file in path order, a blank line between, the stale line once, and ignores unwatched files', function () {
+it('prints one block per changed file in path order, a blank line between, starts one rebuild, and ignores unwatched files', function () {
     Artisan::call('quine:nudge', ['--session' => 'sess-1']);
     ($this->write)('routes/web.php', "<?php\n");
     ($this->write)('app/Models/Thing.php', "<?php\n");
@@ -114,16 +118,8 @@ it('prints one block per changed file in path order, a blank line between, the s
 
     Artisan::call('quine:nudge', ['--session' => 'sess-1']);
 
-    expect(Artisan::output())->toBe(implode("\n", [
-        'Quine: fyi. app/Models/Thing.php',
-        '',
-        'Quine: fyi. resources/views/thing.blade.php',
-        '',
-        'Quine: fyi. routes/web.php',
-        '',
-        'Quine: fyi. 2 files the graph does not know yet: app/Models/Thing.php, resources/views/thing.blade.php',
-        'php artisan quine:update rebuilds the graph with them, so the next edit to them gets its reach',
-    ])."\n");
+    expect(Artisan::output())->toBe("Quine, after your edit to app/Models/Thing.php:\n\nQuine, after your edit to resources/views/thing.blade.php:\n\nQuine, after your edit to routes/web.php:\n")
+        ->and($this->rebuilds)->toBe(1);
 });
 
 it('refuses --session together with --edit without failing the edit', function () {
@@ -141,25 +137,22 @@ it('prints a usage hint and succeeds when given neither a file nor a session', f
         ->and(Artisan::output())->toContain('quine:nudge <file> [--edit], or quine:nudge --session=<id>');
 });
 
-it('announces a file the graph does not know only once per session', function () {
+it('starts no rebuild when nothing changed', function () {
     Artisan::call('quine:nudge', ['--session' => 'sess-1']);
-    ($this->write)('app/Models/Thing.php', "<?php\n");
-    Artisan::call('quine:nudge', ['--session' => 'sess-1']);
-    ($this->write)('app/Models/Thing.php', "<?php\n\nclass Thing\n{\n}\n");
-
     Artisan::call('quine:nudge', ['--session' => 'sess-1']);
 
-    expect(Artisan::output())->toBe("Quine: fyi. app/Models/Thing.php\ngraph is stale (the app changed after it was built): php artisan quine:update refreshes it\n");
+    expect($this->rebuilds)->toBe(0);
 });
 
-it('does not announce a file the graph already has a node for', function () {
+it('starts a rebuild for a stale fingerprint even when the graph knows every changed file', function () {
     $graph = new Graph;
-    $graph->edge('App\Models\Thing', 'App\Models\Other', 'uses', 'uses', null);
+    $graph->edge('App\\Models\\Thing', 'App\\Models\\Other', 'uses', 'uses', null);
     $graph->save("$this->root/storage/quine/graph.json");
     Artisan::call('quine:nudge', ['--session' => 'sess-1']);
     ($this->write)('app/Models/Thing.php', "<?php\n");
 
     Artisan::call('quine:nudge', ['--session' => 'sess-1']);
 
-    expect(Artisan::output())->toBe("Quine: fyi. app/Models/Thing.php\ngraph is stale (the app changed after it was built): php artisan quine:update refreshes it\n");
+    expect(Artisan::output())->toBe("Quine, after your edit to app/Models/Thing.php:\n")
+        ->and($this->rebuilds)->toBe(1);
 });

@@ -12,9 +12,9 @@ it('nudges about the migration line, the unguarded read and the fixture gap for 
     $nudges = app(NullableBelongsTo::class)->nudges(Change::forNode(Comment::class), updatedGraph());
 
     expect(array_map('strval', $nudges))->toBe([
-        "workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null: \$table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();",
-        'workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)',
-        'workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)',
+        "workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null; the migration says so: \$table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();",
+        'workbench/resources/views/posts/comments.blade.php:4  $comment->author->name breaks when author is null, and it can be (the variable is matched to the model by name, so check it is a Comment)',
+        'workbench/app/Support/PostCache.php:28  $comment->author->id breaks when author is null, and it can be (the variable is matched to the model by name, so check it is a Comment)',
         'workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path',
     ]);
 });
@@ -43,7 +43,7 @@ it('drops the fixture-gap nudge once a fixture produces the null state', functio
     $reasons = array_map(fn (Nudge $nudge) => $nudge->reason, app(NullableBelongsTo::class)->nudges(Change::forNode(Comment::class), updatedGraph()));
 
     expect($reasons)->toHaveCount(3)
-        ->and(implode("\n", $reasons))->toContain('can be null:')->toContain('without null-safety')->not->toContain('no factory, seeder or test');
+        ->and(implode("\n", $reasons))->toContain('can be null;')->toContain('breaks when')->not->toContain('no factory, seeder or test');
 });
 
 it('stays silent for a model edit whose diff does not touch the nullable relation', function () {
@@ -79,7 +79,7 @@ it('nudges for a template edit that reads through a nullable relation, from the 
     $diff = "--- a/$template\n+++ b/$template\n@@ -4,1 +4,1 @@\n-            <strong>{{ \$comment->author->name }}</strong>\n+            <strong>{{ \$comment->author->name }}!</strong>\n";
 
     expect(array_map('strval', app(NullableBelongsTo::class)->nudges(Change::forFile($template, $diff), updatedGraph())))->toBe([
-        'workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)',
+        'workbench/resources/views/posts/comments.blade.php:4  $comment->author->name breaks when author is null, and it can be (the variable is matched to the model by name, so check it is a Comment)',
         'workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path',
     ]);
 });
@@ -99,7 +99,7 @@ it('reports a PHP read only where PHPStan saw the receiver still nullable: not i
     $nudges = array_map('strval', app(NullableBelongsTo::class)->nudges(Change::forNode(Comment::class), updatedGraph()));
 
     expect(implode("\n", $nudges))
-        ->toContain('workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety')
+        ->toContain('workbench/app/Support/PostCache.php:28  $comment->author->id breaks when author is null')
         ->not->toContain('workbench/app/Support/PostCache.php:36')
         ->not->toContain('workbench/app/Support/PostCache.php:45');
 });

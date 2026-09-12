@@ -62,29 +62,6 @@ final readonly class Session
         $files->put($this->snapshotPath($relativePath), $content);
     }
 
-    /**
-     * The files this session has already been told the graph does not know.
-     *
-     * @return list<string>
-     */
-    public function announced(): array
-    {
-        $files = new Filesystem;
-        $path = "$this->directory/announced";
-
-        return $files->isFile($path) ? array_values(array_filter(explode("\n", $files->get($path)), fn (string $line) => $line !== '')) : [];
-    }
-
-    /**
-     * @param  list<string>  $relativePaths
-     */
-    public function announce(array $relativePaths): void
-    {
-        $files = new Filesystem;
-        $files->ensureDirectoryExists($this->directory);
-        $files->put("$this->directory/announced", implode("\n", [...$this->announced(), ...$relativePaths])."\n");
-    }
-
     private function snapshotPath(string $relativePath): string
     {
         return "$this->directory/snapshots/".hash('xxh128', $relativePath);

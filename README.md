@@ -30,12 +30,12 @@ php artisan quine:update
 `quine:update` prints a summary of the models, hidden edges and pages, a line counting who calls and reads what (`symbols: 15 calls, 31 fetches from 23 files; templates: 2 indexed`), and ends with the nudges the recipes have for the whole app. On the package's own fixture app that ends like this:
 
 ```
-  NUDGES ....................................... what to check before you edit
-  workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null: $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
-  workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)
-  workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)
+  CHECK BEFORE EDITING ....................................... what to check before you edit
+  workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null; the migration says so: $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
+  workbench/resources/views/posts/comments.blade.php:4  $comment->author->name breaks when author is null, and it can be (the variable is matched to the model by name, so check it is a Comment)
+  workbench/app/Support/PostCache.php:28  $comment->author->id breaks when author is null, and it can be (the variable is matched to the model by name, so check it is a Comment)
   workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
-  workbench/app/Support/PostCache.php:28  builds a storage path from Comment->author, which can be null
+  workbench/app/Support/PostCache.php:28  the storage path at this line is built from Comment->author, which can be null
 ```
 
 ## Ask about something
@@ -47,7 +47,7 @@ php artisan quine:ask Post
 ```
 
 ```
-  NEIGHBOURHOOD .................................... Workbench\App\Models\Post
+  AROUND IT .................................... Workbench\App\Models\Post
     <- [relation: posts() HasMany] Workbench\App\Models\Author  workbench/app/Models/Author.php:23
     <- [relation: post() BelongsTo] Workbench\App\Models\Comment  workbench/app/Models/Comment.php:31
     -> [relation: author() BelongsTo] Workbench\App\Models\Author  workbench/app/Models/Post.php:37
@@ -72,8 +72,8 @@ php artisan quine:ask Post
         -> [event: queued listener] Workbench\App\Listeners\NotifyEditors@handle
         <- referenced by 2 classes (uses; --full lists them)
 
-  NUDGES ....................................... what to check before you edit
-    workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null: ...
+  CHECK BEFORE EDITING ....................................... what to check before you edit
+    workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null; the migration says so: ...
     workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
 ```
 
@@ -86,7 +86,7 @@ php artisan quine:ask 'Comment::author'
 ```
 
 ```
-  CONSUMERS ............................. Workbench\App\Models\Comment::author
+  USED BY ............................. Workbench\App\Models\Comment::author
     <- [fetches: fetches author] workbench/resources/views/posts/comments.blade.php  workbench/resources/views/posts/comments.blade.php:4
     <- [fetches: fetches author] workbench/resources/views/posts/comments.blade.php  workbench/resources/views/posts/comments.blade.php:5
 ```
@@ -98,52 +98,51 @@ A read that builds a cache key, a storage path, a URL, a config key or a queue n
 `quine:nudge <file>` says what an edit to one file can reach. It prints nothing for a file the graph does not know. Delete `author()` from the fixture's Comment model and it says:
 
 ```
-Quine: hang on. workbench/app/Models/Comment.php
-Comment::author() removed; called from workbench/app/Support/PostCache.php:28, workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5
-reaches workbench/resources/views/posts/comments.blade.php:4 (no test renders this) via Comment::author; whether a test exercises your change is yours to check
-reached PostSummaryController::cached, nothing found that uses it
-no test covers this file
-workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null: $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
-workbench/resources/views/posts/comments.blade.php:4  reads $comment->author->name without null-safety, but Comment->author can be null (variable matched by name, heuristic)
-workbench/app/Support/PostCache.php:28  reads $comment->author->id without null-safety, but Comment->author can be null (variable matched by name, heuristic)
+Quine, after your edit to workbench/app/Models/Comment.php:
+Comment::author() is gone but still called from workbench/app/Support/PostCache.php:28, workbench/resources/views/posts/comments.blade.php:4, workbench/resources/views/posts/comments.blade.php:5: those calls break
+the template workbench/resources/views/posts/comments.blade.php:4 (no test renders it) shows this; a test rendering a template is not a test of your change
+PostSummaryController::cached uses this, and nothing quine can see uses that: a dead end, or a string-keyed call it cannot follow
+workbench/database/migrations/0001_01_01_000003_create_comments_table.php:13  Comment->author can be null; the migration says so: $table->foreignId('author_id')->nullable()->constrained()->nullOnDelete();
+workbench/resources/views/posts/comments.blade.php:4  $comment->author->name breaks when author is null, and it can be (the variable is matched to the model by name, so check it is a Comment)
+workbench/app/Support/PostCache.php:28  $comment->author->id breaks when author is null, and it can be (the variable is matched to the model by name, so check it is a Comment)
 workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null author: a green suite proves nothing about that path
-workbench/app/Support/PostCache.php:28  builds a storage path from Comment->author, which was removed
+workbench/app/Support/PostCache.php:28  the storage path at this line is built from Comment->author, which is gone: this line breaks
 ```
 
 Make the fixture's `title` column nullable and it says:
 
 ```
-Quine: hang on. workbench/database/migrations/0001_01_01_000002_create_posts_table.php
-workbench/app/Support/PostCache.php:19  builds a cache key from Post->title, which can now be null
+Quine, after your edit to workbench/database/migrations/0001_01_01_000002_create_posts_table.php:
+workbench/app/Support/PostCache.php:19  the cache key at this line is built from Post->title, which can now be null: the key changes shape
 ```
 
 Touch the fixture's Post model somewhere near its observer, policy and event and it says:
 
 ```
-Quine: hang on. workbench/app/Models/Post.php
-reaches workbench/resources/views/posts/comments.blade.php: no test renders this
+Quine, after your edit to workbench/app/Models/Post.php:
+the template workbench/resources/views/posts/comments.blade.php shows this, and no test renders it: check it in the browser or write one
 on saving -> Workbench\App\Observers\PostObserver@saving
-policy -> Workbench\App\Policies\PostPolicy
-dispatches Workbench\App\Events\PostPublished -> Workbench\App\Listeners\NotifyEditors@handle (queued listener)
-templates reached: workbench/resources/views/posts/show.blade.php (a test renders each; whether it exercises your change is yours to check)
-1 test file covers this file: vendor/bin/pest --tia runs it
+Workbench\App\Policies\PostPolicy decides who may do this; it is not in this file
+this dispatches PostPublished; NotifyEditors::handle runs on it, queued, so later and outside the request
+templates that show this: workbench/resources/views/posts/show.blade.php. Each has a test that renders it; a test rendering a template is not a test of your change
+1 test file runs workbench/app/Models/Post.php, PostPageTest.php; vendor/bin/pest --tia runs just that
 ```
 
 Make `post_id` nullable on the fixture's comments table and it says:
 
 ```
-Quine: hang on. workbench/database/migrations/0001_01_01_000003_create_comments_table.php
-workbench/database/migrations/0001_01_01_000003_create_comments_table.php:14  Comment->post can be null: $table->foreignId('post_id')->nullable()->constrained()->cascadeOnDelete();
+Quine, after your edit to workbench/database/migrations/0001_01_01_000003_create_comments_table.php:
+workbench/database/migrations/0001_01_01_000003_create_comments_table.php:14  Comment->post can be null; the migration says so: $table->foreignId('post_id')->nullable()->constrained()->cascadeOnDelete();
 workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comment with a null post: a green suite proves nothing about that path
 ```
 
-"Hang on" is earned by a gap, a hidden edge or a recipe; when everything reached is tested and nothing is hidden, the opener is "fyi". It rebuilds the graph first if the app's shape has changed since the last build.
+Every line after the first says what your change touches, what checking it costs, and where quine is guessing; there is no verdict word to decode. When the app has changed shape since the last build, the graph is rebuilt in the background and the next edit answers from the fresh one.
 
 ## Claude Code hook
 
 The package ships a PostToolUse hook for Claude Code. After any tool that changes files inside a Laravel app that has quine installed, Bash heredocs included, it runs `quine:nudge` on whatever changed and if there's something to note, hands that back to the agent as additional context.
 
-The nudge answers from the saved graph, so it takes well under a second even on a big app. When the app has changed since the graph was built it says so on its last line; `php artisan quine:update` refreshes it. Only a first run with no graph at all builds one inside the hook, and if that takes longer than the hook's twenty seconds the agent is told to run `quine:update` by hand rather than left with silence.
+The nudge answers from the saved graph, so it takes well under a second even on a big app. When the app has changed shape since the graph was built, or gains a file the graph has never seen, the hook starts `quine:update` in the background and says nothing about it; the next edit answers from the fresh graph. (On Windows there is no background run; run `quine:update` yourself.) Only a first run with no graph at all builds one inside the hook, and if that takes longer than the hook's twenty seconds the agent is told to run `quine:update` by hand rather than left with silence.
 
 Add this to `~/.claude/settings.json`, or to `.claude/settings.local.json` in one app to keep it local:
 

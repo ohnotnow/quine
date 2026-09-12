@@ -61,7 +61,7 @@ final class QuineHook
 
             $stdout = $exec(['php', 'artisan', 'quine:nudge', "--session=$session"], $root, self::TIMEOUT, null);
             $nudges = $stdout === null
-                ? 'Quine: gave up after '.self::TIMEOUT.'s waiting for quine:nudge (a first run builds the whole graph). Run php artisan quine:update once by hand; after that an edit answers in well under a second.'
+                ? 'Quine had nothing in '.self::TIMEOUT.'s: the first run in an app builds its index. Run php artisan quine:update once (about 20s on a mid-sized app, read-only apart from storage/app/quine); every edit after that answers in under a second.'
                 : trim($stdout);
 
             if ($nudges === '') {

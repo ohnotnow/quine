@@ -37,7 +37,7 @@ final class KeyedMember implements Recipe
                     continue;
                 }
 
-                $nudges[] = new Nudge(Str::beforeLast($edge['at'], ':'), (int) Str::afterLast($edge['at'], ':'), "builds a $sink from ".class_basename($class)."->$member".($what === '' ? '' : ", which $what"));
+                $nudges[] = new Nudge(Str::beforeLast($edge['at'], ':'), (int) Str::afterLast($edge['at'], ':'), "the $sink at this line is built from ".class_basename($class)."->$member".($what === '' ? '' : ", which $what"));
             }
         }
 
@@ -131,8 +131,8 @@ final class KeyedMember implements Recipe
 
         foreach ($this->columnTypes($change->addedLines()) as $column => $type) {
             $what = match (true) {
-                $this->addsNullable($change, $column) => 'can now be null',
-                isset($removed[$column]) && $removed[$column] !== $type => 'changed type',
+                $this->addsNullable($change, $column) => 'can now be null: the key changes shape',
+                isset($removed[$column]) && $removed[$column] !== $type => 'changed type: the key changes shape',
                 default => null,
             };
 
@@ -192,14 +192,14 @@ final class KeyedMember implements Recipe
     {
         $found = [];
 
-        foreach ([['was removed', $change->removedMethods()], ['changed', $change->changedMethods()]] as [$what, $methods]) {
+        foreach ([['is gone: this line breaks', $change->removedMethods()], ['changed shape: check this line', $change->changedMethods()]] as [$what, $methods]) {
             foreach ($methods as $method) {
                 $found[] = ['class' => $class, 'member' => $this->consumedName($method), 'what' => $what];
             }
         }
 
         foreach ($this->castsChanged($change) as $column) {
-            $found[] = ['class' => $class, 'member' => $column, 'what' => 'changed cast'];
+            $found[] = ['class' => $class, 'member' => $column, 'what' => 'changed its cast: the key changes shape'];
         }
 
         return $found;

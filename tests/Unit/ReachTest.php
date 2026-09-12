@@ -15,7 +15,7 @@ it('still knows a class whose only edges are the symbol edges from its own metho
 
     $digest = (new Reach($graph, app(Project::class)))->digest(Change::forFile('workbench/app/Policies/PostPolicy.php', "+        return \$post->isPublished();\n"));
 
-    expect($digest['notes'])->toContain('1 test file covers this file: PostPageTest.php (vendor/bin/pest --tia runs it)');
+    expect($digest['notes'])->toContain('1 test file runs workbench/app/Policies/PostPolicy.php, PostPageTest.php; vendor/bin/pest --tia runs just that');
 });
 
 /**
@@ -42,7 +42,7 @@ it('walks through a cycle once and reaches the routed action beyond it', functio
         'kind' => 'route GET|HEAD /c',
         'trail' => ['Workbench\App\Models\Post::isPublished', 'Workbench\App\Support\A::x', 'Workbench\App\Support\B::y'],
         'at' => 'workbench/app/Support/A.php:10',
-        'coverage' => 'no test covers workbench/app/Http/Controllers/C.php',
+        'coverage' => 'no test runs workbench/app/Http/Controllers/C.php, by the coverage data',
     ]])
         ->and($walk['frontiers'])->toBe([])
         ->and($walk['stopped'])->toBeFalse();
@@ -60,8 +60,8 @@ it('prints ten endpoints for the hook and points at quine:ask for the rest', fun
     $digest = (new Reach($graph, app(Project::class)))->digest(Change::forFile('workbench/app/Models/Post.php', "-    public function isPublished(): bool\n"));
 
     expect($digest['reach'])->toHaveCount(11)
-        ->and($digest['reach'][0])->toBe('reaches route GET|HEAD /c1 (C1::show) via Post::isPublished -> C1::show (at workbench/app/Http/Controllers/C1.php:10); no test covers workbench/app/Http/Controllers/C1.php')
-        ->and($digest['reach'][10])->toBe('and 2 more: quine:ask Post::isPublished lists them');
+        ->and($digest['reach'][0])->toBe('Post::isPublished is used at workbench/app/Http/Controllers/C1.php:10; that use ends up in the GET|HEAD /c1 route, in C1::show; no test runs workbench/app/Http/Controllers/C1.php, by the coverage data')
+        ->and($digest['reach'][10])->toBe('and 2 more; php artisan quine:ask Post::isPublished lists them');
 });
 
 it('treats every method of a page-routed class, a Livewire full-page component, as the route action', function () {
@@ -92,7 +92,7 @@ it('follows a method nobody calls, such as a resource toArray, through whoever c
 
     // Breadth first: the job is one hop away, the route three.
     expect(array_map(fn (array $endpoint) => [$endpoint['kind'], $endpoint['trail']], $walk['endpoints']))->toBe([
-        ['job, by namespace', ['Workbench\App\Models\User::full_name']],
+        ['a job (going by its namespace)', ['Workbench\App\Models\User::full_name']],
         ['route GET|HEAD /api/notes/{note}', ['Workbench\App\Models\User::full_name', 'Workbench\App\Http\Resources\NoteResource::toArray', 'Workbench\App\Http\Resources\NoteResource::__construct']],
     ])
         ->and($walk['frontiers'])->toBe([]);
@@ -107,8 +107,8 @@ it('prints the constructor bridge as new Class, and a namespace guess as by name
     $graph->edge('Workbench\App\Mcp\Tools\GetNote::handle', 'Workbench\App\Models\User::full_name', 'fetches', 'fetches full_name', 'workbench/app/Mcp/Tools/GetNote.php:37');
 
     expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\User::full_name')['lines'])->toBe([
-        'reaches Workbench\App\Mcp\Tools\GetNote (MCP tool, by namespace) via User::full_name -> GetNote::handle (at workbench/app/Mcp/Tools/GetNote.php:37); no test covers workbench/app/Mcp/Tools/GetNote.php',
-        'reaches route GET|HEAD /api/notes/{note} (NoteController::show) via User::full_name -> NoteResource::toArray -> new NoteResource -> NoteController::show (at workbench/app/Http/Resources/NoteResource.php:23); no test covers workbench/app/Http/Controllers/NoteController.php',
+        'User::full_name is used at workbench/app/Mcp/Tools/GetNote.php:37; that use ends up in Workbench\App\Mcp\Tools\GetNote, an MCP tool (going by its namespace), in GetNote::handle; no test runs workbench/app/Mcp/Tools/GetNote.php, by the coverage data',
+        'User::full_name is used at workbench/app/Http/Resources/NoteResource.php:23; that use ends up in the GET|HEAD /api/notes/{note} route, in NoteController::show; the call chain is NoteController::show -> new NoteResource -> NoteResource::toArray -> User::full_name; no test runs workbench/app/Http/Controllers/NoteController.php, by the coverage data',
     ]);
 });
 
@@ -120,7 +120,7 @@ it('collapses the templates one trail reaches to a line naming what renders each
     $graph->coverage['workbench/resources/views/a.blade.php'] = ['workbench/tests/Feature/ATest.php', 'workbench/tests/Feature/AlsoTest.php'];
 
     expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\User::full_name')['lines'])->toBe([
-        'reaches workbench/resources/views/a.blade.php:4 (ATest.php, AlsoTest.php render it), workbench/resources/views/b.blade.php:9 (no test renders this) via User::full_name; whether a test exercises your change is yours to check',
+        'the templates workbench/resources/views/a.blade.php:4 (ATest.php, AlsoTest.php render it), workbench/resources/views/b.blade.php:9 (no test renders it) show this; a test rendering a template is not a test of your change',
     ]);
 });
 
@@ -135,7 +135,7 @@ it('prints the routes one trail reaches on one line, naming their actions', func
     }
 
     expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\User::full_name')['lines'])->toBe([
-        'reaches routes POST /api/notes, GET|HEAD /api/notes/{note}, PUT|PATCH /api/notes/{note} (NoteController::store, show, update) via User::full_name -> NoteResource::toArray -> new NoteResource (at workbench/app/Http/Resources/NoteResource.php:23); no test covers workbench/app/Http/Controllers/NoteController.php',
+        'User::full_name is used at workbench/app/Http/Resources/NoteResource.php:23; that use ends up in the POST /api/notes, GET|HEAD /api/notes/{note}, PUT|PATCH /api/notes/{note} routes, in NoteController::store, show and update; the call chain is NoteController::store -> new NoteResource -> NoteResource::toArray -> User::full_name; no test runs workbench/app/Http/Controllers/NoteController.php, by the coverage data',
     ]);
 });
 
@@ -147,8 +147,8 @@ it('labels an MCP server as a server and a page route by its component and actio
     $graph->edge('route GET|HEAD /admin/users [admin.users]', 'Workbench\App\Livewire\Admin\Users', 'route', 'page web', null);
 
     expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\Note::inChannelsOf')['lines'])->toBe([
-        'reaches Workbench\App\Mcp\Servers\Main (MCP server, by namespace) via Note::inChannelsOf -> Main::instructionsFor (at workbench/app/Mcp/Servers/Main.php:51); no test covers workbench/app/Mcp/Servers/Main.php',
-        'reaches route GET|HEAD /admin/users (Users component, toggleAdmin) via Note::inChannelsOf -> Users::toggleAdmin (at workbench/app/Livewire/Admin/Users.php:207); no test covers workbench/app/Livewire/Admin/Users.php',
+        'Note::inChannelsOf is used at workbench/app/Mcp/Servers/Main.php:51; that use ends up in Workbench\App\Mcp\Servers\Main, an MCP server (going by its namespace), in Main::instructionsFor; no test runs workbench/app/Mcp/Servers/Main.php, by the coverage data',
+        'Note::inChannelsOf is used at workbench/app/Livewire/Admin/Users.php:207; that use ends up in the /admin/users page, in Users::toggleAdmin; no test runs workbench/app/Livewire/Admin/Users.php, by the coverage data',
     ]);
 });
 
@@ -160,6 +160,6 @@ it('follows a resource through collection() as well as its constructor', functio
     $graph->edge('route GET|HEAD /posts [posts.index]', 'Workbench\App\Http\Controllers\PostController', 'route', 'index web', null);
 
     expect((new Reach($graph, app(Project::class)))->reachLines('Workbench\App\Models\Post::title')['lines'])->toBe([
-        'reaches route GET|HEAD /posts (PostController::index) via Post::title -> PostResource::toArray -> PostResource::collection -> PostController::index (at workbench/app/Http/Resources/PostResource.php:17); no test covers workbench/app/Http/Controllers/PostController.php',
+        'Post::title is used at workbench/app/Http/Resources/PostResource.php:17; that use ends up in the GET|HEAD /posts route, in PostController::index; the call chain is PostController::index -> PostResource::collection -> PostResource::toArray -> Post::title; no test runs workbench/app/Http/Controllers/PostController.php, by the coverage data',
     ]);
 });

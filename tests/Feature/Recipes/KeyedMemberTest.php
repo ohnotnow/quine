@@ -20,8 +20,8 @@ it('nudges about the cache key built from a column a migration edit makes nullab
 
     Artisan::call('quine:nudge', ['file' => 'workbench/database/migrations/0001_01_01_000002_create_posts_table.php']);
 
-    expect(Artisan::output())->toStartWith('Quine: hang on. ')
-        ->toContain("\nworkbench/app/Support/PostCache.php:19  builds a cache key from Post->title, which can now be null\n");
+    expect(Artisan::output())->toStartWith('Quine, after your edit to ')
+        ->toContain("\nworkbench/app/Support/PostCache.php:19  the cache key at this line is built from Post->title, which can now be null: the key changes shape\n");
 });
 
 it('nudges about the cache key built from an accessor a model edit removed, under the name it is read by', function () {
@@ -29,7 +29,7 @@ it('nudges about the cache key built from an accessor a model edit removed, unde
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    expect(Artisan::output())->toContain("\nworkbench/app/Support/PostCache.php:19  builds a cache key from Post->title_label, which was removed\n");
+    expect(Artisan::output())->toContain("\nworkbench/app/Support/PostCache.php:19  the cache key at this line is built from Post->title_label, which is gone: this line breaks\n");
 });
 
 it('says nothing about a column no sink reads', function () {
@@ -45,11 +45,11 @@ it('names the sink a nullable member feeds when the model is asked about, and no
 
     Artisan::call('quine:ask', ['node' => 'Comment']);
 
-    expect(Artisan::output())->toContain('workbench/app/Support/PostCache.php:28  builds a storage path from Comment->author, which can be null');
+    expect(Artisan::output())->toContain('workbench/app/Support/PostCache.php:28  the storage path at this line is built from Comment->author, which can be null');
 
     Artisan::call('quine:ask', ['node' => 'Post']);
 
-    expect(Artisan::output())->not->toContain('builds a cache key');
+    expect(Artisan::output())->not->toContain('the cache key at this line');
 });
 
 it('nudges about the cache key built from a column whose cast a model edit changed', function () {
@@ -64,5 +64,5 @@ it('nudges about the cache key built from a column whose cast a model edit chang
 
     Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
 
-    expect(Artisan::output())->toContain("\nworkbench/app/Support/PostCache.php:19  builds a cache key from Post->title, which changed cast\n");
+    expect(Artisan::output())->toContain("\nworkbench/app/Support/PostCache.php:19  the cache key at this line is built from Post->title, which changed its cast: the key changes shape\n");
 });

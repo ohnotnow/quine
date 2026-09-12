@@ -38,6 +38,7 @@ class QuineServiceProvider extends ServiceProvider
         $this->app->bind(Registry::class, fn (Application $app) => Registry::fromConfig($app));
 
         $this->app->bind(Differ::class, GitDiffer::class);
+        $this->app->bind(Rebuild::class, fn (Application $app) => new Rebuild($app->make(Project::class)));
         $this->app->bind(Nudger::class, fn (Application $app) => new Nudger($app->make(Project::class), $app->make(Registry::class)));
         $this->app->singleton(Bladestan::class);
 
