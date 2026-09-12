@@ -21,18 +21,37 @@ beforeEach(function () {
     };
 });
 
-it('hands the edit itself to quine:nudge on stdin', function () {
-    QuineHook::run(['tool_input' => ['file_path' => $this->edited, 'old_string' => "a\n", 'new_string' => "b\n"]], $this->exec);
-    QuineHook::run(['tool_input' => ['file_path' => $this->edited, 'content' => "<?php\n"]], $this->exec);
+it('asks quine what the session changed after a Bash command, finding the app from cwd', function () {
+    QuineHook::run(['session_id' => 'sess-1', 'cwd' => $this->root, 'tool_name' => 'Bash', 'tool_input' => ['command' => "cat > app/Models/Service.php <<'EOF'"]], $this->exec);
+
+    expect($this->calls)->toBe([[['php', 'artisan', 'quine:nudge', '--session=sess-1'], $this->root, 20, null]]);
+});
+
+it('asks the same question after an Edit or Write, finding the app from the file, and sends nothing on stdin', function () {
+    QuineHook::run(['session_id' => 'sess-1', 'cwd' => '/somewhere/else', 'tool_input' => ['file_path' => $this->edited, 'old_string' => "a\n", 'new_string' => "b\n"]], $this->exec);
+    QuineHook::run(['session_id' => 'sess-1', 'tool_input' => ['file_path' => $this->edited, 'content' => "<?php\n"]], $this->exec);
 
     expect($this->calls)->toBe([
-        [['php', 'artisan', 'quine:nudge', $this->edited, '--edit'], $this->root, 20, '{"old":"a\\n","new":"b\\n"}'],
-        [['php', 'artisan', 'quine:nudge', $this->edited, '--edit'], $this->root, 20, '{"old":null,"new":"<?php\\n"}'],
+        [['php', 'artisan', 'quine:nudge', '--session=sess-1'], $this->root, 20, null],
+        [['php', 'artisan', 'quine:nudge', '--session=sess-1'], $this->root, 20, null],
     ]);
 });
 
+it('does nothing without a session id', function () {
+    expect(QuineHook::run(['cwd' => $this->root, 'tool_input' => ['file_path' => $this->edited]], $this->exec))->toBeNull()
+        ->and($this->calls)->toBe([]);
+});
+
+it('does nothing for a cwd with no Laravel root above it and no file to go by', function () {
+    $outside = dirname(config()->string('quine.graph_path')).'/elsewhere';
+    File::ensureDirectoryExists($outside);
+
+    expect(QuineHook::run(['session_id' => 'sess-1', 'cwd' => $outside, 'tool_input' => ['command' => 'ls']], $this->exec))->toBeNull()
+        ->and($this->calls)->toBe([]);
+});
+
 it('injects the nudge as additional context when quine has something to say', function () {
-    $json = QuineHook::run(['tool_input' => ['file_path' => $this->edited]], $this->exec);
+    $json = QuineHook::run(['session_id' => 'sess-1', 'tool_input' => ['file_path' => $this->edited]], $this->exec);
 
     expect($json)->toBeString();
 
@@ -40,19 +59,19 @@ it('injects the nudge as additional context when quine has something to say', fu
 
     expect($decoded['hookSpecificOutput']['hookEventName'])->toBe('PostToolUse')
         ->and($decoded['hookSpecificOutput']['additionalContext'])->toBe('some nudge')
-        ->and($this->calls)->toBe([[['php', 'artisan', 'quine:nudge', $this->edited], $this->root, 20, null]]);
+        ->and($this->calls)->toBe([[['php', 'artisan', 'quine:nudge', '--session=sess-1'], $this->root, 20, null]]);
 });
 
 it('stays silent when quine prints nothing', function () {
     $exec = fn () => "  \n";
 
-    expect(QuineHook::run(['tool_input' => ['file_path' => $this->edited]], $exec))->toBeNull();
+    expect(QuineHook::run(['session_id' => 'sess-1', 'tool_input' => ['file_path' => $this->edited]], $exec))->toBeNull();
 });
 
 it('says so when quine:nudge runs out of time, instead of staying silent', function () {
     $exec = fn () => null;
 
-    $json = QuineHook::run(['tool_input' => ['file_path' => $this->edited]], $exec);
+    $json = QuineHook::run(['session_id' => 'sess-1', 'tool_input' => ['file_path' => $this->edited]], $exec);
     $decoded = json_decode((string) $json, true);
 
     expect($decoded['hookSpecificOutput']['additionalContext'])
@@ -64,7 +83,7 @@ it('does nothing for a file with no Laravel root above it', function () {
     File::ensureDirectoryExists(dirname($outside));
     File::put($outside, '<?php');
 
-    expect(QuineHook::run(['tool_input' => ['file_path' => $outside]], $this->exec))->toBeNull()
+    expect(QuineHook::run(['session_id' => 'sess-1', 'tool_input' => ['file_path' => $outside]], $this->exec))->toBeNull()
         ->and($this->calls)->toBe([]);
 });
 

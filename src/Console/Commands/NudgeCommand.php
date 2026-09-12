@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Ohffs\Quine\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Filesystem\Filesystem;
+use Illuminate\Support\Facades\Process;
 use InvalidArgumentException;
 use Ohffs\Quine\Change;
 use Ohffs\Quine\Differ;
@@ -12,9 +14,11 @@ use Ohffs\Quine\EditDiffer;
 use Ohffs\Quine\Fingerprint;
 use Ohffs\Quine\Graph;
 use Ohffs\Quine\GraphBuilder;
+use Ohffs\Quine\Nudger;
 use Ohffs\Quine\Project;
 use Ohffs\Quine\Reach;
-use Ohffs\Quine\Recipes\Registry;
+use Ohffs\Quine\Session;
+use Ohffs\Quine\SnapshotDiffer;
 use Symfony\Component\Console\Input\StreamableInputInterface;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Throwable;
@@ -28,18 +32,40 @@ class NudgeCommand extends Command
     /**
      * The command signature.
      */
-    protected $signature = 'quine:nudge {file : Absolute or relative path of the edited file}
-                                        {--edit : Read the edit from stdin as JSON {"old": string|null, "new": string} instead of diffing against git}';
+    protected $signature = 'quine:nudge {file? : Absolute or relative path of the edited file}
+                                        {--edit : Read the edit from stdin as JSON {"old": string|null, "new": string} instead of diffing against git}
+                                        {--session= : Nudge every file changed since this session last asked, remembering each as it now stands}';
 
     /**
      * The command description.
      */
     protected $description = 'Print what one edited file reaches, from the saved graph; builds the graph only when there is none.';
 
-    public function handle(GraphBuilder $builder, Project $project, Registry $recipes, Differ $differ): int
+    public function handle(GraphBuilder $builder, Project $project, Nudger $nudger, Differ $differ): int
     {
         try {
-            $path = $this->within($this->argument('file'), $project);
+            $session = $this->option('session');
+            $file = $this->argument('file');
+
+            if (is_string($session) && $session !== '') {
+                if ($this->option('edit')) {
+                    throw new InvalidArgumentException('--session and --edit are different doors: pass one');
+                }
+
+                if (is_string($file)) {
+                    $this->error('quine: --session scans the tree; the file argument is ignored');
+                }
+
+                return $this->scan(new Session($project, $session), $builder, $project, $nudger);
+            }
+
+            if (! is_string($file)) {
+                $this->line('quine:nudge <file> [--edit], or quine:nudge --session=<id>');
+
+                return self::SUCCESS;
+            }
+
+            $path = $this->within($file, $project);
 
             if ($path === null) {
                 return self::SUCCESS;
@@ -47,29 +73,142 @@ class NudgeCommand extends Command
 
             ['graph' => $graph, 'stale' => $stale] = $this->savedGraph($builder, $project);
             $change = Change::forFile($path, ($this->editFromStdin($project) ?? $differ)->diff($path));
-            ['callers' => $callers, 'reach' => $reach, 'gaps' => $gaps, 'hidden' => $hidden, 'notes' => $notes] = (new Reach($graph, $project))->digest($change);
-            $nudges = array_map('strval', $recipes->nudges($change, $graph));
+            $lines = $nudger->lines($change, $graph);
 
-            if ($callers === [] && $reach === [] && $gaps === [] && $hidden === [] && $notes === [] && $nudges === []) {
+            if ($lines === []) {
                 return self::SUCCESS;
             }
 
-            // "hang on" is earned by a broken caller, somewhere the walk reached, a gap, a hidden edge or a recipe; the rest is for the record.
-            $this->line(($callers !== [] || $reach !== [] || $gaps !== [] || $hidden !== [] || $nudges !== [] ? 'Quine: hang on. ' : 'Quine: fyi. ').$path);
-
-            foreach ([...$callers, ...$reach, ...$gaps, ...$hidden, ...$notes, ...$nudges] as $line) {
-                $this->line($line);
-            }
-
-            if ($stale) {
-                $this->line('graph is stale (the app changed after it was built): php artisan quine:update refreshes it');
-            }
+            $this->print($lines, $stale);
         } catch (Throwable $e) {
             $output = $this->output->getOutput();
             ($output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output)->writeln('quine: '.$e->getMessage());
         }
 
         return self::SUCCESS;
+    }
+
+    /**
+     * Every file under the watched paths touched since the session's marker
+     * and different from its snapshot gets a block, in path order; the stale
+     * line prints once after the last. The first run only plants the marker:
+     * nothing before it is this session's doing. Deletions are not seen (a
+     * deleted file is not there to be found) and are not nudged yet.
+     */
+    private function scan(Session $session, GraphBuilder $builder, Project $project, Nudger $nudger): int
+    {
+        $start = time();
+        $marker = $session->marker();
+
+        if ($marker === null) {
+            $session->touch($start);
+
+            return self::SUCCESS;
+        }
+
+        $files = new Filesystem;
+        $changed = [];
+
+        foreach ($project->watchedPaths() as $directory) {
+            if (! $files->isDirectory($directory)) {
+                continue;
+            }
+
+            foreach ($files->allFiles($directory) as $file) {
+                if ($file->getMTime() >= $marker) {
+                    $changed[$project->relative($file->getPathname())] = $file->getContents();
+                }
+            }
+        }
+
+        ksort($changed);
+        $graph = null;
+        $reach = null;
+        $stale = false;
+        $printed = false;
+        $announced = $session->announced();
+        $unknown = [];
+
+        foreach ($changed as $relative => $current) {
+            $baseline = $session->snapshot($relative) ?? $this->headCopy($project, $relative);
+
+            if ($baseline === $current) {
+                continue;
+            }
+
+            if ($graph === null || $reach === null) {
+                ['graph' => $graph, 'stale' => $stale] = $this->savedGraph($builder, $project);
+                $reach = new Reach($graph, $project);
+            }
+
+            $lines = $nudger->lines(Change::forFile($relative, (new SnapshotDiffer($project, $baseline))->diff($relative)), $graph);
+
+            if ($lines !== []) {
+                if ($printed) {
+                    $this->line('');
+                }
+
+                $this->print($lines, false);
+                $printed = true;
+            }
+
+            if ($reach->knows($relative) === false && ! in_array($relative, $announced, true)) {
+                $unknown[] = $relative;
+            }
+
+            $session->remember($relative, $current);
+        }
+
+        // A file the graph has never seen gets no reach until quine:update runs; say so, once per file.
+        if ($unknown !== []) {
+            if ($printed) {
+                $this->line('');
+            }
+
+            $count = count($unknown);
+            $this->line('Quine: fyi. '.$count.' file'.($count === 1 ? '' : 's').' the graph does not know yet: '.implode(', ', $unknown));
+            $this->line('php artisan quine:update rebuilds the graph with '.($count === 1 ? 'it, so the next edit to it' : 'them, so the next edit to them').' gets its reach');
+            $session->announce($unknown);
+        } elseif ($printed && $stale) {
+            $this->stale();
+        }
+
+        $session->touch($start);
+
+        return self::SUCCESS;
+    }
+
+    /**
+     * The file as the last commit has it, or null when git cannot say (untracked, no repo, no git).
+     */
+    private function headCopy(Project $project, string $relative): ?string
+    {
+        try {
+            $result = Process::path($project->basePath)->run(['git', 'show', "HEAD:$relative"]);
+
+            return $result->successful() ? $result->output() : null;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * @param  list<string>  $lines
+     */
+    private function print(array $lines, bool $stale): void
+    {
+        foreach ($lines as $line) {
+            $this->line($line);
+        }
+
+        if ($stale) {
+            $this->stale();
+        }
+    }
+
+    private function stale(): void
+    {
+        $this->line('graph is stale (the app changed after it was built): php artisan quine:update refreshes it');
     }
 
     /**

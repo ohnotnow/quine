@@ -428,6 +428,26 @@ final readonly class Reach
      * its recorded file, any other app class by PSR-4 from its path. A file
      * the graph never mentions is nothing to say anything about.
      */
+    /**
+     * Whether the graph has a node for this file: an app class or a template
+     * it saw when it was built. A file it could never have (a route file, a
+     * migration) is not "unknown", just not a node.
+     *
+     * @return bool|null null when the file is not the kind that gets a node
+     */
+    public function knows(string $relativePath): ?bool
+    {
+        $template = str_ends_with($relativePath, '.blade.php');
+        $absolute = $this->project->absolute($relativePath);
+        $underApp = str_starts_with($absolute, rtrim($this->project->appPath, '/').'/') && str_ends_with($relativePath, '.php');
+
+        if (! $template && ! $underApp) {
+            return null;
+        }
+
+        return $this->node($relativePath) !== null;
+    }
+
     private function node(string $relativePath): ?string
     {
         if (str_ends_with($relativePath, '.blade.php')) {

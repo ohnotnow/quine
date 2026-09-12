@@ -141,7 +141,7 @@ workbench/app/Models/Comment.php  no factory, seeder or test ever creates a Comm
 
 ## Claude Code hook
 
-The package ships a PostToolUse hook for Claude Code. After every Write or Edit inside a Laravel app that has quine installed, it runs `quine:nudge` on the edited file and if there's something to note, hands that back to the agent as additional context.
+The package ships a PostToolUse hook for Claude Code. After any tool that changes files inside a Laravel app that has quine installed, Bash heredocs included, it runs `quine:nudge` on whatever changed and if there's something to note, hands that back to the agent as additional context.
 
 The nudge answers from the saved graph, so it takes well under a second even on a big app. When the app has changed since the graph was built it says so on its last line; `php artisan quine:update` refreshes it. Only a first run with no graph at all builds one inside the hook, and if that takes longer than the hook's twenty seconds the agent is told to run `quine:update` by hand rather than left with silence.
 
@@ -152,7 +152,7 @@ Add this to `~/.claude/settings.json`, or to `.claude/settings.local.json` in on
     "hooks": {
         "PostToolUse": [
             {
-                "matcher": "Write|Edit",
+                "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
                 "hooks": [
                     {
                         "type": "command",

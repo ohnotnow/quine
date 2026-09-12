@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Ohffs\Quine;
 
 use Illuminate\Filesystem\Filesystem;
+use Ohffs\Quine\Support\Declarations;
 
 /**
  * The diff of one edit, from the text it replaced and the text it wrote, as
@@ -75,7 +76,7 @@ final readonly class EditDiffer implements Differ
                 return [
                     'before' => array_slice($lines, max(0, $from - self::CONTEXT), min($from, self::CONTEXT)),
                     'after' => array_slice($lines, $to, self::CONTEXT),
-                    'header' => rtrim("@@ -$line,$removed +$line,$added @@ ".$this->declarationAbove($lines, $from))."\n",
+                    'header' => rtrim("@@ -$line,$removed +$line,$added @@ ".Declarations::above($lines, $from))."\n",
                 ];
             }
         }
@@ -85,22 +86,6 @@ final readonly class EditDiffer implements Differ
             'after' => array_slice($new, $count - $suffix, self::CONTEXT),
             'header' => null,
         ];
-    }
-
-    /**
-     * The nearest method declaration at or above the index, trimmed, or nothing.
-     *
-     * @param  list<string>  $lines
-     */
-    private function declarationAbove(array $lines, int $index): string
-    {
-        for ($i = min($index, count($lines) - 1); $i >= 0; $i--) {
-            if (preg_match(Change::DECLARATION, $lines[$i]) === 1) {
-                return trim($lines[$i]);
-            }
-        }
-
-        return '';
     }
 
     /**

@@ -6,17 +6,19 @@ declare(strict_types=1);
 /*
  * quine's Claude Code PostToolUse hook.
  *
- * Claude Code runs this after every Write or Edit, with the tool call as JSON
- * on stdin. It finds the Laravel app the edited file belongs to, asks that
- * app's quine for nudges about the edit, and hands them back to the agent as
- * additional context. It prints nothing unless quine has something to say,
- * says so when quine ran out of time (silence must never mean "broken"), and
- * it never fails an edit.
+ * Claude Code runs this after every tool that can change files (Bash, Write,
+ * Edit and their relatives), with the tool call as JSON on stdin. It finds the
+ * Laravel app (above the edited file when the tool named one, else above the
+ * session's working directory), asks that app's quine what changed since this
+ * session last asked, and hands the answer back to the agent as additional
+ * context. It prints nothing unless quine has something to say, says so when
+ * quine ran out of time (silence must never mean "broken"), and never fails
+ * an edit.
  *
  * Standalone on purpose: no Laravel bootstrap, no Composer autoload. The app's
- * own artisan does the real work. The edit itself (the text replaced and the
- * text written) goes to quine on stdin, so the nudge is about this edit and
- * not about everything uncommitted in the file.
+ * own artisan does the real work: quine:nudge --session scans the tree for
+ * files changed since its marker and diffs each against the copy it kept, so
+ * a heredoc from Bash and an Edit tool call get the same nudge.
  */
 final class QuineHook
 {
@@ -45,22 +47,19 @@ final class QuineHook
     public static function run(array $input, callable $exec): ?string
     {
         try {
-            $toolInput = $input['tool_input'] ?? null;
-            $file = is_array($toolInput) ? ($toolInput['file_path'] ?? null) : null;
+            $session = $input['session_id'] ?? null;
 
-            if (! is_string($file) || $file === '') {
+            if (! is_string($session) || $session === '') {
                 return null;
             }
 
-            $root = self::laravelRoot(dirname($file));
+            $root = self::root($input);
 
             if ($root === null || ! is_dir($root.'/vendor/ohffs/quine')) {
                 return null;
             }
 
-            $edit = self::edit($toolInput);
-            $command = ['php', 'artisan', 'quine:nudge', $file, ...($edit === null ? [] : ['--edit'])];
-            $stdout = $exec($command, $root, self::TIMEOUT, $edit);
+            $stdout = $exec(['php', 'artisan', 'quine:nudge', "--session=$session"], $root, self::TIMEOUT, null);
             $nudges = $stdout === null
                 ? 'Quine: gave up after '.self::TIMEOUT.'s waiting for quine:nudge (a first run builds the whole graph). Run php artisan quine:update once by hand; after that an edit answers in well under a second.'
                 : trim($stdout);
@@ -81,23 +80,23 @@ final class QuineHook
     }
 
     /**
-     * The edit as JSON for quine:nudge --edit: what an Edit replaced and
-     * wrote, or what a Write wrote with nothing replaced. Null when the tool
-     * input carries neither, and quine falls back to git.
+     * The Laravel app the call concerns: above the file the tool named when
+     * it named one, else above the session's working directory.
      *
-     * @param  array<string, mixed>  $toolInput
+     * @param  array<string, mixed>  $input
      */
-    private static function edit(array $toolInput): ?string
+    private static function root(array $input): ?string
     {
-        if (isset($toolInput['old_string'], $toolInput['new_string']) && is_string($toolInput['old_string']) && is_string($toolInput['new_string'])) {
-            return json_encode(['old' => $toolInput['old_string'], 'new' => $toolInput['new_string']], JSON_THROW_ON_ERROR);
+        $toolInput = $input['tool_input'] ?? null;
+        $file = is_array($toolInput) ? ($toolInput['file_path'] ?? null) : null;
+
+        if (is_string($file) && $file !== '') {
+            return self::laravelRoot(dirname($file));
         }
 
-        if (isset($toolInput['content']) && is_string($toolInput['content'])) {
-            return json_encode(['old' => null, 'new' => $toolInput['content']], JSON_THROW_ON_ERROR);
-        }
+        $cwd = $input['cwd'] ?? null;
 
-        return null;
+        return is_string($cwd) && $cwd !== '' ? self::laravelRoot($cwd) : null;
     }
 
     /**

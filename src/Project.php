@@ -43,6 +43,18 @@ final readonly class Project
     }
 
     /**
+     * The directories a change worth a nudge can land in: app code, migrations,
+     * routes and templates. Fingerprint keeps its own shorter list on purpose
+     * (views are not part of the graph's shape as it defines it).
+     *
+     * @return list<string>
+     */
+    public function watchedPaths(): array
+    {
+        return [$this->appPath, $this->migrationsPath, $this->basePath.'/routes', ...$this->viewPaths];
+    }
+
+    /**
      * Strip the base path from an absolute path. A path outside the base path is returned unchanged.
      */
     public function relative(string $absolute): string

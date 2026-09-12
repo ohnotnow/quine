@@ -50,7 +50,7 @@ php artisan quine:nudge app/Models/Post.php
 
 - prints `Quine: hang on.` when the edit reaches a gap or a hidden edge (a removed or changed method with callers, somewhere the walk from an edited method ends up such as a route, template, listener, job or MCP tool, a template no test renders, an observer or listener outside the file, a recipe finding), `Quine: fyi.` when it only reaches tested things, and nothing when the graph does not know the file
 - the callers line names every resolved consumer of a removed or changed method, templates on their own line; treat it as the checklist
-- `--edit` reads `{"old": ..., "new": ...}` from stdin to judge one edit rather than the working-tree diff; the hook uses it
+- `--edit` reads `{"old": ..., "new": ...}` from stdin to judge one edit rather than the working-tree diff, for replaying an edit by hand; `--session=<id>` nudges every file changed since that session last asked, which is what the hook uses
 
 ### 4. Wire the Claude Code hook
 
@@ -61,7 +61,7 @@ Add to `~/.claude/settings.json` or the app's `.claude/settings.local.json`:
     "hooks": {
         "PostToolUse": [
             {
-                "matcher": "Write|Edit",
+                "matcher": "Bash|Write|Edit|MultiEdit|NotebookEdit",
                 "hooks": [
                     {
                         "type": "command",
@@ -74,7 +74,7 @@ Add to `~/.claude/settings.json` or the app's `.claude/settings.local.json`:
 }
 ```
 
-- the hook runs `quine:nudge --edit` on the edited file and returns the output as additional context; it is silent when quine has nothing to say
+- the hook runs `quine:nudge --session=<session id>` after any tool that can change files, Bash included, and returns the output as additional context; it is silent when quine has nothing to say
 - it rebuilds the graph first when the app's shape changed since the last build (about a second on a small app)
 
 ### 5. Configure only when the defaults are wrong
