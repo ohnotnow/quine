@@ -9,8 +9,9 @@ declare(strict_types=1);
  * Claude Code runs this after every Write or Edit, with the tool call as JSON
  * on stdin. It finds the Laravel app the edited file belongs to, asks that
  * app's quine for nudges about the edit, and hands them back to the agent as
- * additional context. It prints nothing at all unless a recipe has something
- * to say, and it never fails an edit.
+ * additional context. It prints nothing unless quine has something to say,
+ * says so when quine ran out of time (silence must never mean "broken"), and
+ * it never fails an edit.
  *
  * Standalone on purpose: no Laravel bootstrap, no Composer autoload. The app's
  * own artisan does the real work. The edit itself (the text replaced and the
@@ -19,6 +20,12 @@ declare(strict_types=1);
  */
 final class QuineHook
 {
+    /**
+     * Seconds to wait for quine:nudge. A nudge from a saved graph takes well
+     * under a second; only a first run with no graph at all builds one.
+     */
+    public const TIMEOUT = 20;
+
     /**
      * @return array<string, mixed>
      */
@@ -33,7 +40,7 @@ final class QuineHook
      * The JSON to print for Claude Code, or null to stay silent.
      *
      * @param  array<string, mixed>  $input
-     * @param  callable(list<string>, string, int, ?string): string  $exec  Runs a command in a directory with a timeout and optional stdin, returning stdout.
+     * @param  callable(list<string>, string, int, ?string): ?string  $exec  Runs a command in a directory with a timeout and optional stdin, returning stdout, or null when it ran out of time.
      */
     public static function run(array $input, callable $exec): ?string
     {
@@ -53,7 +60,10 @@ final class QuineHook
 
             $edit = self::edit($toolInput);
             $command = ['php', 'artisan', 'quine:nudge', $file, ...($edit === null ? [] : ['--edit'])];
-            $nudges = trim($exec($command, $root, 20, $edit));
+            $stdout = $exec($command, $root, self::TIMEOUT, $edit);
+            $nudges = $stdout === null
+                ? 'Quine: gave up after '.self::TIMEOUT.'s waiting for quine:nudge (a first run builds the whole graph). Run php artisan quine:update once by hand; after that an edit answers in well under a second.'
+                : trim($stdout);
 
             if ($nudges === '') {
                 return null;
@@ -91,11 +101,12 @@ final class QuineHook
     }
 
     /**
-     * Run a command without a shell, giving up after the timeout.
+     * Run a command without a shell, returning its stdout, or null when it
+     * ran past the timeout and was killed.
      *
      * @param  list<string>  $command
      */
-    public static function exec(array $command, string $cwd, int $timeoutSeconds, ?string $stdin = null): string
+    public static function exec(array $command, string $cwd, int $timeoutSeconds, ?string $stdin = null): ?string
     {
         $process = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $cwd);
 
@@ -113,6 +124,7 @@ final class QuineHook
         stream_set_blocking($pipes[2], false);
 
         $stdout = '';
+        $timedOut = false;
         $deadline = microtime(true) + $timeoutSeconds;
 
         while (true) {
@@ -127,6 +139,7 @@ final class QuineHook
 
             if (microtime(true) > $deadline) {
                 proc_terminate($process, 9);
+                $timedOut = true;
 
                 break;
             }
@@ -138,7 +151,7 @@ final class QuineHook
         fclose($pipes[2]);
         proc_close($process);
 
-        return $stdout;
+        return $timedOut ? null : $stdout;
     }
 
     /**

@@ -49,6 +49,16 @@ it('stays silent when quine prints nothing', function () {
     expect(QuineHook::run(['tool_input' => ['file_path' => $this->edited]], $exec))->toBeNull();
 });
 
+it('says so when quine:nudge runs out of time, instead of staying silent', function () {
+    $exec = fn () => null;
+
+    $json = QuineHook::run(['tool_input' => ['file_path' => $this->edited]], $exec);
+    $decoded = json_decode((string) $json, true);
+
+    expect($decoded['hookSpecificOutput']['additionalContext'])
+        ->toBe('Quine: gave up after 20s waiting for quine:nudge (a first run builds the whole graph). Run php artisan quine:update once by hand; after that an edit answers in well under a second.');
+});
+
 it('does nothing for a file with no Laravel root above it', function () {
     $outside = dirname(config()->string('quine.graph_path')).'/elsewhere/file.php';
     File::ensureDirectoryExists(dirname($outside));

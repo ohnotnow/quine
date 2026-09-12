@@ -34,7 +34,7 @@ class NudgeCommand extends Command
     /**
      * The command description.
      */
-    protected $description = 'Print the nudges the recipes have for one edited file, rebuilding the graph if the app has changed.';
+    protected $description = 'Print what one edited file reaches, from the saved graph; builds the graph only when there is none.';
 
     public function handle(GraphBuilder $builder, Project $project, Registry $recipes, Differ $differ): int
     {
@@ -45,7 +45,7 @@ class NudgeCommand extends Command
                 return self::SUCCESS;
             }
 
-            $graph = $this->freshGraph($builder, $project);
+            ['graph' => $graph, 'stale' => $stale] = $this->savedGraph($builder, $project);
             $change = Change::forFile($path, ($this->editFromStdin($project) ?? $differ)->diff($path));
             ['callers' => $callers, 'reach' => $reach, 'gaps' => $gaps, 'hidden' => $hidden, 'notes' => $notes] = (new Reach($graph, $project))->digest($change);
             $nudges = array_map('strval', $recipes->nudges($change, $graph));
@@ -59,6 +59,10 @@ class NudgeCommand extends Command
 
             foreach ([...$callers, ...$reach, ...$gaps, ...$hidden, ...$notes, ...$nudges] as $line) {
                 $this->line($line);
+            }
+
+            if ($stale) {
+                $this->line('graph is stale (the app changed after it was built): php artisan quine:update refreshes it');
             }
         } catch (Throwable $e) {
             $output = $this->output->getOutput();
@@ -98,25 +102,28 @@ class NudgeCommand extends Command
     }
 
     /**
-     * The saved graph when the app's shape has not changed since it was built, else a rebuild.
+     * The saved graph, and whether the app has changed shape since it was
+     * built. Only when there is no graph at all is one built here: a rebuild
+     * takes tens of seconds on a real app, and the hook that calls this has
+     * a budget of twenty, so answering from a stale graph beats saying nothing.
+     *
+     * @return array{graph: Graph, stale: bool}
      */
-    private function freshGraph(GraphBuilder $builder, Project $project): Graph
+    private function savedGraph(GraphBuilder $builder, Project $project): array
     {
-        $fingerprint = Fingerprint::of($project);
-
         try {
             $graph = is_file($project->graphPath) ? Graph::load($project->graphPath) : null;
         } catch (Throwable) {
             $graph = null;
         }
 
-        if ($graph !== null && ($graph->meta['fingerprint'] ?? null) === $fingerprint) {
-            return $graph;
+        if ($graph !== null) {
+            return ['graph' => $graph, 'stale' => ($graph->meta['fingerprint'] ?? null) !== Fingerprint::of($project)];
         }
 
         $graph = $builder->build();
         $graph->save($project->graphPath);
 
-        return $graph;
+        return ['graph' => $graph, 'stale' => false];
     }
 }

@@ -19,6 +19,7 @@ Everything so far, in one place, since nothing is tagged yet:
 - The routed actions one trail reaches on one class share a line (`reaches routes POST /api/v1/notes, GET|HEAD /api/v1/notes/{note} (NoteController::store, show) via ...`), a resource is followed through `collection()` and `make()` as well as `new`, a class under `Mcp\Servers` is an MCP server, a Livewire page route prints its component and action, and the hook's ten-line cap counts printed lines.
 - A read or call inside the key argument of a framework sink carries the sink in its label: `fetches title (cache key)`, `fetches id (null-safe, storage path)`, for `Cache`, `cache()`, `Redis`, `Storage` (and `Storage::disk()->`), `Http`, `config()`/`Config`, `->onQueue()` and `->onConnection()`, matched by name. `meta.symbols.sinks` counts them.
 - An edit that only adds or changes comments stays silent, even when the editor's anchor text repeats the line below the docblock: lines the old and new text share are context, not a change.
+- `quine:nudge` answers from the saved graph instead of rebuilding it when the app has changed, and says `graph is stale ... quine:update refreshes it` on its last line; only a missing graph is built inside the hook. The hook says so when `quine:nudge` runs past its twenty seconds instead of printing nothing. Found by the first blind test: on a mid-sized app every edit after the first triggered a 22 second rebuild, the hook killed it at 20, and quine was invisible.
 
 ## [v0.1.0](https://github.com/ohnotnow/quine/compare/...v0.1.0) - 202x-xx-xx
 

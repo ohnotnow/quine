@@ -5,7 +5,6 @@ declare(strict_types=1);
 use Illuminate\Support\Facades\Artisan;
 use Ohffs\Quine\Console\Commands\NudgeCommand;
 use Ohffs\Quine\Differ;
-use Ohffs\Quine\Fingerprint;
 use Ohffs\Quine\Graph;
 use Ohffs\Quine\Project;
 use Symfony\Component\Console\Input\ArrayInput;
@@ -315,31 +314,34 @@ it('prints nothing for a file the graph does not know', function () {
     expect(Artisan::output())->toBe('');
 });
 
-it('rebuilds the graph only when the fingerprint of the app has changed', function () {
-    app()->instance(Differ::class, new FakeDiffer(''));
+it('builds the graph when there is none, and answers from the saved one instead of rebuilding when the app has changed since', function () {
+    app()->instance(Differ::class, new FakeDiffer("-        return \$this->created_at !== null;\n+        return \$this->exists;\n"));
     $project = app(Project::class);
     $migration = workbench_path('database/migrations/0001_01_01_000001_create_authors_table.php');
     $originalMtime = filemtime($migration);
 
-    $this->artisan('quine:nudge', ['file' => 'workbench/app/Models/Post.php'])->assertSuccessful();
+    Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
+    $fresh = Artisan::output();
     $first = Graph::load($project->graphPath)->meta;
-
-    $this->artisan('quine:nudge', ['file' => 'workbench/app/Models/Post.php'])->assertSuccessful();
-    $second = Graph::load($project->graphPath)->meta;
 
     try {
         touch($migration, $originalMtime + 60);
-        $this->artisan('quine:nudge', ['file' => 'workbench/app/Models/Post.php'])->assertSuccessful();
-        $third = Graph::load($project->graphPath)->meta;
-        $expected = Fingerprint::of($project);
+        Artisan::call('quine:nudge', ['file' => 'workbench/app/Models/Post.php']);
+        $stale = Artisan::output();
+        $second = Graph::load($project->graphPath)->meta;
     } finally {
         touch($migration, $originalMtime);
     }
 
-    expect($second['fingerprint'])->toBe($first['fingerprint'])
+    expect($fresh)->not->toContain('graph is stale')
         ->and($second['built_at'])->toBe($first['built_at'])
-        ->and($third['fingerprint'])->not->toBe($first['fingerprint'])
-        ->and($third['fingerprint'])->toBe($expected);
+        ->and($second['fingerprint'])->toBe($first['fingerprint'])
+        ->and($stale)->toBe(implode("\n", [
+            'Quine: fyi. workbench/app/Models/Post.php',
+            'tia cache is stale: 1 test files are not in it (CommentPageTest.php): re-run vendor/bin/pest --tia',
+            '1 test file covers this file: PostPageTest.php (vendor/bin/pest --tia runs it)',
+            'graph is stale (the app changed after it was built): php artisan quine:update refreshes it',
+        ])."\n");
 });
 
 it('prints nothing for a file outside the project and survives a differ that throws', function () {
